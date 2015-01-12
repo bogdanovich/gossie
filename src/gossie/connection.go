@@ -292,7 +292,7 @@ func (cp *connectionPool) runWithRetries(t transaction, retries int) error {
 	}
 
 	// loop exited normally so it hit the retry limit
-	return errors.New("Max retries hit trying to run a Cassandra transaction")
+	return fmt.Errorf("Max retries hit trying to run a Cassandra transaction. Last error: %v", err)
 }
 
 func (cp *connectionPool) randomNode(now int) (*node, error) {
