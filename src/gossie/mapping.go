@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+
 	. "github.com/wadey/gossie/src/cassandra"
 )
 
@@ -417,7 +418,7 @@ func (m *sparseMapping) Unmap(destination interface{}, provider RowProvider) err
 			if column.Value != nil {
 				err := f.unmarshalValue(column.Value, v)
 				if err != nil {
-					return errors.New(fmt.Sprint("Error unmarshaling column: ", name, " value: ", err))
+					return err
 				}
 			}
 		}
@@ -505,7 +506,7 @@ func (m *compactMapping) Unmap(destination interface{}, provider RowProvider) er
 		if column.Value != nil {
 			err := f.unmarshalValue(column.Value, v)
 			if err != nil {
-				return errors.New(fmt.Sprint("Error unmarshaling column for compact value: ", err))
+				return err
 			}
 		}
 	}

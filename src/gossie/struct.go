@@ -39,6 +39,24 @@ type GossieType interface {
 	Unmarshaler(value interface{}, tagArgs *string) Unmarshaler
 }
 
+type MarshalValueError struct {
+	Name string
+	Err  error
+}
+
+func (e *MarshalValueError) Error() string {
+	return fmt.Sprint("Error marshaling field ", e.Name, ":", e.Err)
+}
+
+type UnmarshalValueError struct {
+	Name string
+	Err  error
+}
+
+func (e *UnmarshalValueError) Error() string {
+	return fmt.Sprint("Error unmarshaling field ", e.Name, ":", e.Err)
+}
+
 // Allows you to specify `marshal:"json"` for example to use the jsonType GossieType
 // This makes it easier to use common custom encodings
 var gossieTypes = map[string]GossieType{
@@ -119,7 +137,10 @@ func (f *field) marshalValue(structValue *reflect.Value) ([]byte, error) {
 	}
 	b, err := Marshal(vi, f.cassandraType)
 	if err != nil {
-		return nil, errors.New(fmt.Sprint("Error marshaling field value for field ", f.name, ":", err))
+		return nil, &MarshalValueError{
+			Name: f.name,
+			Err:  err,
+		}
 	}
 	return b, nil
 }
@@ -146,7 +167,10 @@ func (f *field) unmarshalValue(b []byte, structValue *reflect.Value) error {
 	}
 	err := Unmarshal(b, f.cassandraType, vpi)
 	if err != nil {
-		return errors.New(fmt.Sprint("Error unmarshaling field ", f.name, ":", err))
+		return &UnmarshalValueError{
+			Name: f.name,
+			Err:  err,
+		}
 	}
 	return nil
 }
