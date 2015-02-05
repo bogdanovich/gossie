@@ -158,6 +158,7 @@ func (q *MockQuery) buildSlice() (*Slice, error) {
 				end = b
 			}
 		}
+		return &Slice{Start: start, End: end, Count: q.columnLimit, Reversed: q.reversed}, nil
 	} else if len(components) > 0 {
 		last := len(components) - 1
 		for i, c := range components {
@@ -191,7 +192,6 @@ func (q *MockQuery) buildSlice() (*Slice, error) {
 		}
 		end = append(end, packComposite(b, eocEquals)...)
 	}
-
 	return &Slice{Start: start, End: end, Count: q.columnLimit, Reversed: q.reversed}, nil
 }
 
