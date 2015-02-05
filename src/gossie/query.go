@@ -239,6 +239,8 @@ func (q *query) buildSlice(reader Reader) error {
 				end = b
 			}
 		}
+		reader.Slice(&Slice{Start: start, End: end, Count: q.columnLimit, Reversed: q.reversed})
+		return nil
 	} else if len(components) > 0 {
 		last := len(components) - 1
 		for i, c := range components {
