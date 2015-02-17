@@ -78,7 +78,7 @@ func (m *MockReader) sliceRow(r *Row) (*Row, error) {
 			}
 			cr.Columns = append(cr.Columns, c)
 		}
-		if slice.Count != 0 && len(cr.Columns) > slice.Count {
+		if len(cr.Columns) > slice.Count {
 			if slice.Reversed {
 				cr.Columns = cr.Columns[(len(cr.Columns) - slice.Count):len(cr.Columns)]
 			} else {
