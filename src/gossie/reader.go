@@ -118,6 +118,10 @@ type Reader interface {
 	//Default token range is -1 to 170141183460469231731687303715884105728
 	SetTokenRange(startToken, endToken string) Reader
 
+	//Set the page size for RangeScan
+	//Default page size is 100 rows
+	SetTokenRangeCount(count int) Reader
+
 	// Scan a range This function will call the callback
 	// function with data read. Callback should return true to continue scanning or false to stop
 	// Usage:
@@ -144,6 +148,7 @@ type reader struct {
 	expressions      []*IndexExpression
 	startToken       string
 	endToken         string
+	tokenRangeCount  int
 	columnParent     ColumnParent
 }
 
@@ -156,6 +161,11 @@ func newReader(cp *connectionPool, cl ConsistencyLevel) *reader {
 
 func (r *reader) SetTokenRange(startToken, endToken string) Reader {
 	r.startToken, r.endToken = startToken, endToken
+	return r
+}
+
+func (r *reader) SetTokenRangeCount(count int) Reader {
+	r.tokenRangeCount = count
 	return r
 }
 
@@ -426,6 +436,9 @@ func (r *reader) RangeScan() (<-chan *Row, <-chan error) {
 	}
 	if len(r.expressions) != 0 {
 		kr.RowFilter = r.expressions
+	}
+	if r.tokenRangeCount > 0 {
+		kr.Count = int32(r.tokenRangeCount)
 	}
 	sp := r.buildPredicate()
 

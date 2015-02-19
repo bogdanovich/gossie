@@ -26,6 +26,7 @@ func (m *MockReader) MultiCount(keys [][]byte) ([]*RowColumnCount, error)   { pa
 func (m *MockReader) RangeGet(*Range) ([]*Row, error)                       { panic("not implemented") }
 func (m *MockReader) IndexedGet(*IndexedRange) ([]*Row, error)              { panic("not implemented") }
 func (m *MockReader) SetTokenRange(startToken, endToken string) Reader      { panic("not implemented") }
+func (m *MockReader) SetTokenRangeCount(count int) Reader                   { panic("not implemented") }
 func (m *MockReader) RangeScan() (data <-chan *Row, err <-chan error)       { panic("not implemented") }
 func (m *MockReader) WideRowScan(key, startColumn []byte, batchSize int32, callback func(*Column) bool) error {
 	panic("not implemented")
