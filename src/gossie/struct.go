@@ -218,7 +218,7 @@ func inspectStruct(v *reflect.Value) (*structInspection, error) {
 	}
 	if si, found = structInspectionCache[t]; !found {
 		si, err = newStructInspection(t)
-		if err != nil {
+		if err == nil {
 			structInspectionCache[t] = si
 		}
 	}
