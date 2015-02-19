@@ -253,7 +253,7 @@ func (cp *connectionPool) runWithRetries(t transaction, retries int) error {
 				transport: c.transport,
 			}
 		}
-		err := t(tc)
+		err = t(tc)
 
 		if err != nil {
 			switch err.(type) {
