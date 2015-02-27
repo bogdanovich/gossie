@@ -123,10 +123,12 @@ func (q *query) Components(components ...interface{}) Query {
 }
 
 func (q *query) Between(start, end interface{}) Query {
-	if start != nil && reflect.ValueOf(start).IsNil() {
+	v := reflect.ValueOf(start)
+	if start != nil && v.Kind() == reflect.Ptr && v.IsNil() {
 		start = nil
 	}
-	if end != nil && reflect.ValueOf(end).IsNil() {
+	v = reflect.ValueOf(end)
+	if end != nil && v.Kind() == reflect.Ptr && v.IsNil() {
 		end = nil
 	}
 	q.betweenStart = start

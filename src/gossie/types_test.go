@@ -55,10 +55,6 @@ func TestMarshalWrongType(t *testing.T) {
 	type no int
 	var v no = 1
 
-	errorMarshal(t, v, BytesType)
-	errorMarshal(t, v, AsciiType)
-	errorMarshal(t, v, UTF8Type)
-	errorMarshal(t, v, LongType)
 	errorMarshal(t, v, IntegerType)
 	errorMarshal(t, v, DecimalType)
 	errorMarshal(t, v, UUIDType)

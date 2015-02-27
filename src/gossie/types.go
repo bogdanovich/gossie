@@ -78,98 +78,53 @@ func Marshal(value interface{}, typeDesc TypeDesc) ([]byte, error) {
 		return nil, ErrorUnsupportedNilMarshaling
 	}
 
-	// dereference in case we got a pointer, check for nil too
-	var dvalue interface{}
-	switch v := value.(type) {
-	case *[]byte:
-		if v == nil {
+	v := reflect.ValueOf(value)
+	k := v.Kind()
+
+	// Other kinds can also be nil (Chan, Func, Map, Interface, Slice)
+	// But there's no support the direct marshal of those.
+	if k == reflect.Ptr {
+		if v.IsNil() {
 			return nil, ErrorUnsupportedNilMarshaling
 		}
-		dvalue = *v
-	case *bool:
-		if v == nil {
+
+		e := v.Elem()
+		if e.CanInterface() == false {
 			return nil, ErrorUnsupportedNilMarshaling
 		}
-		dvalue = *v
-	case *int8:
-		if v == nil {
-			return nil, ErrorUnsupportedNilMarshaling
-		}
-		dvalue = *v
-	case *int16:
-		if v == nil {
-			return nil, ErrorUnsupportedNilMarshaling
-		}
-		dvalue = *v
-	case *int:
-		if v == nil {
-			return nil, ErrorUnsupportedNilMarshaling
-		}
-		dvalue = *v
-	case *int32:
-		if v == nil {
-			return nil, ErrorUnsupportedNilMarshaling
-		}
-		dvalue = *v
-	case *int64:
-		if v == nil {
-			return nil, ErrorUnsupportedNilMarshaling
-		}
-		dvalue = *v
-	case *string:
-		if v == nil {
-			return nil, ErrorUnsupportedNilMarshaling
-		}
-		dvalue = *v
-	case *UUID:
-		if v == nil {
-			return nil, ErrorUnsupportedNilMarshaling
-		}
-		dvalue = *v
-	case *float32:
-		if v == nil {
-			return nil, ErrorUnsupportedNilMarshaling
-		}
-		dvalue = *v
-	case *float64:
-		if v == nil {
-			return nil, ErrorUnsupportedNilMarshaling
-		}
-		dvalue = *v
-	case *time.Time:
-		if v == nil {
-			return nil, ErrorUnsupportedNilMarshaling
-		}
-		dvalue = *v
-	default:
-		dvalue = v
+
+		return Marshal(e.Interface(), typeDesc)
 	}
 
-	switch v := dvalue.(type) {
+	// Special marshalling for complex types
+	switch i := v.Interface().(type) {
 	case []byte:
-		return v, nil
-	case bool:
-		return marshalBool(v, typeDesc)
-	case int8:
-		return marshalInt(int64(v), 1, typeDesc)
-	case int16:
-		return marshalInt(int64(v), 2, typeDesc)
-	case int:
-		return marshalInt(int64(v), 4, typeDesc)
-	case int32:
-		return marshalInt(int64(v), 4, typeDesc)
-	case int64:
-		return marshalInt(v, 8, typeDesc)
-	case string:
-		return marshalString(v, typeDesc)
+		return i, nil
 	case UUID:
-		return marshalUUID(v, typeDesc)
-	case float32:
-		return marshalFloat32(v, typeDesc)
-	case float64:
-		return marshalFloat64(v, typeDesc)
+		return marshalUUID(i, typeDesc)
 	case time.Time:
-		return marshalTime(v, typeDesc)
+		return marshalTime(i, typeDesc)
+	}
+
+	switch k {
+	case reflect.Bool:
+		return marshalBool(v.Bool(), typeDesc)
+	case reflect.Int8:
+		return marshalInt(v.Int(), 1, typeDesc)
+	case reflect.Int16:
+		return marshalInt(v.Int(), 2, typeDesc)
+	case reflect.Int:
+		return marshalInt(v.Int(), 4, typeDesc)
+	case reflect.Int32:
+		return marshalInt(v.Int(), 4, typeDesc)
+	case reflect.Int64:
+		return marshalInt(v.Int(), 8, typeDesc)
+	case reflect.String:
+		return marshalString(v.String(), typeDesc)
+	case reflect.Float32:
+		return marshalFloat32(float32(v.Float()), typeDesc)
+	case reflect.Float64:
+		return marshalFloat64(v.Float(), typeDesc)
 	}
 	return nil, ErrorUnsupportedMarshaling
 }
