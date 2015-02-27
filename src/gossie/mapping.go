@@ -280,7 +280,8 @@ func (m *sparseMapping) Map(source interface{}) (*Row, error) {
 			return nil, err
 		}
 		if len(composite) > 0 {
-			columnName = append(composite, packComposite(columnName, eocEquals)...)
+			compositeCopy := append([]byte(nil), composite...)
+			columnName = append(compositeCopy, packComposite(columnName, eocEquals)...)
 		}
 		if f.skipEmpty && f.isEmpty(v) {
 			continue
