@@ -136,6 +136,21 @@ func TestMarshalBool(t *testing.T) {
 	errorMarshal(t, v, DateType)
 }
 
+func TestMariano(t *testing.T) {
+	var b []byte
+	var v32 int32
+	var vi int
+	var r32 int32
+	var ri int
+
+	v32 = -2147483645
+	vi = -2147483645
+
+	b = []byte{0x80, 0, 0, 3}
+	checkFullMarshal(t, b, BytesType, &v32, &r32)
+	checkFullMarshal(t, b, BytesType, &vi, &ri)
+}
+
 func TestMarshalInt(t *testing.T) {
 	var b []byte
 	var v64 int64
