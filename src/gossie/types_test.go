@@ -270,20 +270,32 @@ func TestMarshalString(t *testing.T) {
 	var v string = "cáñamo"
 	var r string
 
+	type tstring string
+	var rv tstring = "cáñamo"
+	var rr tstring
+
 	b = []byte{'c', 0xc3, 0xa1, 0xc3, 0xb1, 'a', 'm', 'o'}
 	checkFullMarshal(t, b, BytesType, &v, &r)
 	checkFullMarshal(t, b, AsciiType, &v, &r) // NOTE: this lib does not perform ascii/utf8 checking for now
 	checkFullMarshal(t, b, UTF8Type, &v, &r)  // NOTE: this lib does not perform ascii/utf8 checking for now
 
+	checkFullMarshal(t, b, BytesType, &rv, &rr)
+	checkFullMarshal(t, b, AsciiType, &rv, &rr) // NOTE: this lib does not perform ascii/utf8 checking for now
+	checkFullMarshal(t, b, UTF8Type, &rv, &rr)  // NOTE: this lib does not perform ascii/utf8 checking for now
+
 	errorMarshal(t, v, LongType)
 
 	v = "4611686018427387907"
+	rv = "4611686018427387907"
 	b = []byte{0x40, 0, 0, 0, 0, 0, 0, 3}
 	checkFullMarshal(t, b, LongType, &v, &r)
+	checkFullMarshal(t, b, LongType, &rv, &rr)
 
 	v = "-9223372036854775805"
+	rv = "-9223372036854775805"
 	b = []byte{0x80, 0, 0, 0, 0, 0, 0, 3}
 	checkFullMarshal(t, b, LongType, &v, &r)
+	checkFullMarshal(t, b, LongType, &rv, &rr)
 
 	errorMarshal(t, v, IntegerType)
 	errorMarshal(t, v, DecimalType)
@@ -292,6 +304,13 @@ func TestMarshalString(t *testing.T) {
 	errorMarshal(t, v, FloatType)
 	errorMarshal(t, v, DoubleType)
 	errorMarshal(t, v, DateType)
+	errorMarshal(t, rv, IntegerType)
+	errorMarshal(t, rv, DecimalType)
+	errorMarshal(t, rv, UUIDType)
+	errorMarshal(t, rv, BooleanType)
+	errorMarshal(t, rv, FloatType)
+	errorMarshal(t, rv, DoubleType)
+	errorMarshal(t, rv, DateType)
 }
 
 func TestMarshalUUID(t *testing.T) {
