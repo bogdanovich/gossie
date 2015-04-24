@@ -52,7 +52,7 @@ func (m *MockReader) Get(key []byte) (*Row, error) {
 	for _, r := range rows {
 		if bytes.Equal(r.Key, key) {
 			checkExpired(r)
-			return m.sliceRow(r)
+			return m.sliceRow(r), nil
 		}
 	}
 	return nil, nil
@@ -110,11 +110,7 @@ func (m *MockReader) MultiGet(keys [][]byte) ([]*Row, error) {
 		for _, r := range rows {
 			if bytes.Equal(r.Key, key) {
 				checkExpired(r)
-				r, err := m.sliceRow(r)
-				if err != nil {
-					return nil, err
-				}
-				buffer = append(buffer, r)
+				buffer = append(buffer, m.sliceRow(r))
 			}
 		}
 	}
@@ -122,7 +118,7 @@ func (m *MockReader) MultiGet(keys [][]byte) ([]*Row, error) {
 	return rows, nil
 }
 
-func (m *MockReader) sliceRow(r *Row) (*Row, error) {
+func (m *MockReader) sliceRow(r *Row) *Row {
 	if m.slice != nil {
 		slice := m.slice
 		if slice.Reversed {
@@ -148,5 +144,5 @@ func (m *MockReader) sliceRow(r *Row) (*Row, error) {
 		}
 		r = &cr
 	}
-	return r, nil
+	return r
 }
