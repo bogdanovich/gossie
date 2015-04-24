@@ -20,8 +20,6 @@ var _ Reader = &MockReader{}
 func (m *MockReader) ConsistencyLevel(ConsistencyLevel) Reader              { panic("not implemented") }
 func (m *MockReader) Columns([][]byte) Reader                               { panic("not implemented") }
 func (m *MockReader) Where(column []byte, op Operator, value []byte) Reader { panic("not implemented") }
-func (m *MockReader) Count(key []byte) (int, error)                         { panic("not implemented") }
-func (m *MockReader) MultiCount(keys [][]byte) ([]*RowColumnCount, error)   { panic("not implemented") }
 func (m *MockReader) IndexedGet(*IndexedRange) ([]*Row, error)              { panic("not implemented") }
 func (m *MockReader) SetTokenRange(startToken, endToken string) Reader      { panic("not implemented") }
 func (m *MockReader) SetTokenRangeCount(count int) Reader                   { panic("not implemented") }
@@ -58,6 +56,32 @@ func (m *MockReader) Get(key []byte) (*Row, error) {
 		}
 	}
 	return nil, nil
+}
+
+func (m *MockReader) Count(key []byte) (int, error) {
+	r, err := m.Get(key)
+	if err != nil {
+		return 0, err
+	}
+
+	return len(r.Columns), nil
+}
+
+func (m *MockReader) MultiCount(keys [][]byte) ([]*RowColumnCount, error) {
+	counts := make([]*RowColumnCount, len(keys))
+
+	for i, key := range keys {
+		r, err := m.Get(key)
+		if err != nil {
+			return nil, err
+		}
+		counts[i] = &RowColumnCount{
+			Key:   key,
+			Count: len(r.Columns),
+		}
+	}
+
+	return counts, nil
 }
 
 func (m *MockReader) RangeGet(r *Range) ([]*Row, error) {
