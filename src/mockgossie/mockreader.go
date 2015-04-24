@@ -20,10 +20,8 @@ var _ Reader = &MockReader{}
 func (m *MockReader) ConsistencyLevel(ConsistencyLevel) Reader              { panic("not implemented") }
 func (m *MockReader) Columns([][]byte) Reader                               { panic("not implemented") }
 func (m *MockReader) Where(column []byte, op Operator, value []byte) Reader { panic("not implemented") }
-func (m *MockReader) MultiGet(keys [][]byte) ([]*Row, error)                { panic("not implemented") }
 func (m *MockReader) Count(key []byte) (int, error)                         { panic("not implemented") }
 func (m *MockReader) MultiCount(keys [][]byte) ([]*RowColumnCount, error)   { panic("not implemented") }
-func (m *MockReader) RangeGet(*Range) ([]*Row, error)                       { panic("not implemented") }
 func (m *MockReader) IndexedGet(*IndexedRange) ([]*Row, error)              { panic("not implemented") }
 func (m *MockReader) SetTokenRange(startToken, endToken string) Reader      { panic("not implemented") }
 func (m *MockReader) SetTokenRangeCount(count int) Reader                   { panic("not implemented") }
@@ -60,6 +58,44 @@ func (m *MockReader) Get(key []byte) (*Row, error) {
 		}
 	}
 	return nil, nil
+}
+
+func (m *MockReader) RangeGet(r *Range) ([]*Row, error) {
+	rows := m.pool.Rows(m.cf)
+	count := r.Count
+	started := false
+	keys := make([][]byte, 0)
+	for _, row := range rows {
+		if started || r.Start == nil || bytes.Equal(row.Key, r.Start) {
+			started = true
+			keys = append(keys, row.Key)
+			count--
+		}
+		if count <= 0 || (r.End != nil && bytes.Equal(row.Key, r.End)) {
+			break
+		}
+	}
+	return m.MultiGet(keys)
+}
+
+func (m *MockReader) MultiGet(keys [][]byte) ([]*Row, error) {
+	rows := m.pool.Rows(m.cf)
+
+	buffer := make([]*Row, 0)
+	for _, key := range keys {
+		for _, r := range rows {
+			if bytes.Equal(r.Key, key) {
+				checkExpired(r)
+				r, err := m.sliceRow(r)
+				if err != nil {
+					return nil, err
+				}
+				buffer = append(buffer, r)
+			}
+		}
+	}
+
+	return rows, nil
 }
 
 func (m *MockReader) sliceRow(r *Row) (*Row, error) {
