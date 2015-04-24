@@ -22,8 +22,7 @@ func (m *MockReader) Columns([][]byte) Reader                               { pa
 func (m *MockReader) Where(column []byte, op Operator, value []byte) Reader { panic("not implemented") }
 func (m *MockReader) IndexedGet(*IndexedRange) ([]*Row, error)              { panic("not implemented") }
 func (m *MockReader) SetTokenRange(startToken, endToken string) Reader      { panic("not implemented") }
-func (m *MockReader) SetTokenRangeCount(count int) Reader                   { panic("not implemented") }
-func (m *MockReader) RangeScan() (data <-chan *Row, err <-chan error)       { panic("not implemented") }
+func (m *MockReader) SetTokenRangeCount(count int) Reader                   { return m }
 func (m *MockReader) WideRowScan(key, startColumn []byte, batchSize int32, callback func(*Column) bool) error {
 	panic("not implemented")
 }
@@ -116,6 +115,24 @@ func (m *MockReader) MultiGet(keys [][]byte) ([]*Row, error) {
 	}
 
 	return rows, nil
+}
+
+func (m *MockReader) RangeScan() (<-chan *Row, <-chan error) {
+	data := make(chan *Row)
+	errc := make(chan error)
+
+	go func() {
+		defer close(data)
+		defer close(errc)
+
+		rows := m.pool.Rows(m.cf)
+		for _, row := range rows {
+			checkExpired(row)
+			data <- m.sliceRow(row)
+		}
+	}()
+
+	return data, errc
 }
 
 func (m *MockReader) sliceRow(r *Row) *Row {
