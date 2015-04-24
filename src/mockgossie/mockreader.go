@@ -13,15 +13,17 @@ type MockReader struct {
 	rowLimit    int
 	cf          string
 	slice       *Slice
+
+	startToken string
+	endToken   string
 }
 
 var _ Reader = &MockReader{}
 
-func (m *MockReader) ConsistencyLevel(ConsistencyLevel) Reader              { panic("not implemented") }
+func (m *MockReader) ConsistencyLevel(ConsistencyLevel) Reader              { return m }
 func (m *MockReader) Columns([][]byte) Reader                               { panic("not implemented") }
 func (m *MockReader) Where(column []byte, op Operator, value []byte) Reader { panic("not implemented") }
 func (m *MockReader) IndexedGet(*IndexedRange) ([]*Row, error)              { panic("not implemented") }
-func (m *MockReader) SetTokenRange(startToken, endToken string) Reader      { panic("not implemented") }
 func (m *MockReader) SetTokenRangeCount(count int) Reader                   { return m }
 func (m *MockReader) WideRowScan(key, startColumn []byte, batchSize int32, callback func(*Column) bool) error {
 	panic("not implemented")
@@ -43,6 +45,14 @@ func (m *MockReader) Cf(cf string) Reader {
 func (m *MockReader) Slice(s *Slice) Reader {
 	m.slice = s
 	return m
+}
+
+func (m *MockReader) SetTokenRange(startToken, endToken string) Reader {
+	// For now, only allow a token range that is equivalent to the whole range
+	if startToken == "-1" && endToken == "170141183460469231731687303715884105728" {
+		return m
+	}
+	panic("not implemented")
 }
 
 func (m *MockReader) Get(key []byte) (*Row, error) {
