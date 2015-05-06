@@ -130,10 +130,17 @@ func (m *MockConnectionPool) LoadCF(cf string, dump CFDump) {
 			})
 		}
 		sort.Sort(cols)
-		rows = append(rows, &Row{
+
+		row := &Row{
 			Key:     []byte(key),
 			Columns: cols,
-		})
+		}
+
+		// Insert row in sorted order
+		i := sort.Search(len(rows), func(i int) bool { return bytes.Compare(rows[i].Key, row.Key) >= 0 })
+		rows = append(rows, row)
+		copy(rows[i+1:], rows[i:])
+		rows[i] = row
 	}
 	m.Data[cf] = rows
 }
