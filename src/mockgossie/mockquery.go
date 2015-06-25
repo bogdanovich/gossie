@@ -56,7 +56,7 @@ func (m *MockQuery) RangeGet(r *Range) (Result, error) {
 	started := false
 	keys := make([]interface{}, 0)
 	for _, row := range rows {
-		if started || r.Start == nil || bytes.Equal(row.Key, r.Start) {
+		if started || (r.Start == nil || len(r.Start) == 0) || bytes.Equal(row.Key, r.Start) {
 			started = true
 			keys = append(keys, row.Key)
 			count--
@@ -65,6 +65,7 @@ func (m *MockQuery) RangeGet(r *Range) (Result, error) {
 			break
 		}
 	}
+
 	return m.MultiGet(keys)
 }
 
