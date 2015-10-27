@@ -42,7 +42,7 @@ func (m *jsonMarshaler) MarshalCassandra() ([]byte, error) {
 }
 
 func (m *jsonMarshaler) UnmarshalCassandra(b []byte) error {
-	if m.empty != nil && string(b) == *m.empty {
+	if m.empty != nil && (string(b) == *m.empty || len(b) == 0) {
 		b = []byte("null")
 	}
 	return json.Unmarshal(b, m.v)
