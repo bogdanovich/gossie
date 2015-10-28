@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/wadey/gossie/src/cassandra"
+	"github.com/betable/gossie/src/cassandra"
 )
 
 func TestConnection(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
-	. "github.com/wadey/gossie/src/cassandra"
+	. "github.com/betable/gossie/src/cassandra"
 )
 
 type testColumn struct {

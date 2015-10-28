@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/apache/thrift/lib/go/thrift"
-	. "github.com/wadey/gossie/src/cassandra"
-	. "github.com/wadey/gossie/src/gossie"
+	. "github.com/betable/gossie/src/cassandra"
+	. "github.com/betable/gossie/src/gossie"
 )
 
 type MockWriter struct {

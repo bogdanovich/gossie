@@ -2,7 +2,7 @@ package gossie
 
 import (
 	"github.com/apache/thrift/lib/go/thrift"
-	"github.com/wadey/gossie/src/cassandra"
+	"github.com/betable/gossie/src/cassandra"
 )
 
 // Writer is the interface for all the write operations over Cassandra.

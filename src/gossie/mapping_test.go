@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	. "github.com/wadey/gossie/src/cassandra"
+	. "github.com/betable/gossie/src/cassandra"
 )
 
 /*

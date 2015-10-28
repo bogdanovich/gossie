@@ -3,7 +3,7 @@ package mockgossie
 import (
 	"fmt"
 
-	"github.com/wadey/gossie/src/gossie"
+	"github.com/betable/gossie/src/gossie"
 )
 
 type ExampleData struct {

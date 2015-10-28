@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/apache/thrift/lib/go/thrift"
-	"github.com/wadey/gossie/src/cassandra"
+	"github.com/betable/gossie/src/cassandra"
 )
 
 var cassandraRestart = flag.Bool("cassandra-restart", false, "run tests to ensure ConnectionPool tolerates Cassandra restarting")

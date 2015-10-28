@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"github.com/golang/glog"
-	. "github.com/wadey/gossie/src/cassandra"
+	. "github.com/betable/gossie/src/cassandra"
 )
 
 // Row is a Cassandra row, including its row key

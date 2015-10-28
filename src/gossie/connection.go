@@ -13,7 +13,7 @@ import (
 
 	"github.com/apache/thrift/lib/go/thrift"
 	"github.com/golang/glog"
-	"github.com/wadey/gossie/src/cassandra"
+	"github.com/betable/gossie/src/cassandra"
 )
 
 /*
