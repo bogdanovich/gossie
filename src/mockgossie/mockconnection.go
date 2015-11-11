@@ -13,6 +13,8 @@ package mockgossie
 
 import (
 	"bytes"
+	"crypto/md5"
+	"math/big"
 	"sort"
 
 	"github.com/apache/thrift/lib/go/thrift"
@@ -53,7 +55,7 @@ func (m *MockConnectionPool) Query(mapping Mapping) Query {
 type Rows []*Row
 
 func (r Rows) Len() int           { return len(r) }
-func (r Rows) Less(i, j int) bool { return bytes.Compare(r[i].Key, r[j].Key) < 0 }
+func (r Rows) Less(i, j int) bool { return compareRowKeys(r[i].Key, r[j].Key) < 0 }
 func (r Rows) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
 
 type Columns []*Column
@@ -137,10 +139,34 @@ func (m *MockConnectionPool) LoadCF(cf string, dump CFDump) {
 		}
 
 		// Insert row in sorted order
-		i := sort.Search(len(rows), func(i int) bool { return bytes.Compare(rows[i].Key, row.Key) >= 0 })
+		i := sort.Search(len(rows), func(i int) bool { return compareRowKeys(rows[i].Key, row.Key) >= 0 })
 		rows = append(rows, row)
 		copy(rows[i+1:], rows[i:])
 		rows[i] = row
 	}
 	m.Data[cf] = rows
+}
+
+func compareRowKeys(a, b []byte) int {
+	tokenA := keyToToken(a)
+	tokenB := keyToToken(b)
+
+	return tokenA.Cmp(tokenB)
+}
+
+// https://github.com/apache/cassandra/blob/06b2bd3b886041b9e7904138295532939a67540f/src/java/org/apache/cassandra/utils/FBUtilities.java#L245-L248
+func keyToToken(key []byte) *big.Int {
+	tokenBytes := md5.Sum(key)
+	token := new(big.Int).SetBytes(tokenBytes[:])
+
+	// two's complement
+	if len(tokenBytes) > 0 && tokenBytes[0]&0x80 > 0 {
+		one := big.NewInt(1)
+		token.Sub(token, one.Lsh(one, uint(len(tokenBytes))*8))
+
+		// cassandra takes the Abs of the md5 value
+		token.Abs(token)
+	}
+
+	return token
 }

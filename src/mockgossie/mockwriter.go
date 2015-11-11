@@ -51,7 +51,7 @@ func (w *MockWriter) InsertTtl(cf string, row *Row, ttl int) Writer {
 		}
 	}
 
-	i := sort.Search(len(rows), func(i int) bool { return bytes.Compare(rows[i].Key, row.Key) >= 0 })
+	i := sort.Search(len(rows), func(i int) bool { return compareRowKeys(rows[i].Key, row.Key) >= 0 })
 	if i < len(rows) && bytes.Equal(rows[i].Key, row.Key) {
 		// Row already exists, merge the columns
 		e := rows[i]
@@ -121,7 +121,7 @@ func (w *MockWriter) Delete(cf string, key []byte) Writer {
 
 	t := now()
 
-	i := sort.Search(len(rows), func(i int) bool { return bytes.Compare(rows[i].Key, key) >= 0 })
+	i := sort.Search(len(rows), func(i int) bool { return compareRowKeys(rows[i].Key, key) >= 0 })
 	if i < len(rows) && bytes.Equal(rows[i].Key, key) {
 		// Row exists, delete the columns
 		e := rows[i]
@@ -145,7 +145,7 @@ func (w *MockWriter) DeleteColumns(cf string, key []byte, columns [][]byte) Writ
 
 	t := now()
 
-	i := sort.Search(len(rows), func(i int) bool { return bytes.Compare(rows[i].Key, key) >= 0 })
+	i := sort.Search(len(rows), func(i int) bool { return compareRowKeys(rows[i].Key, key) >= 0 })
 	if i < len(rows) && bytes.Equal(rows[i].Key, key) {
 		// Row exists, delete the columns
 		e := rows[i]
