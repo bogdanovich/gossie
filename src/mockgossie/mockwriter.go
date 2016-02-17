@@ -39,7 +39,7 @@ func (w *MockWriter) Insert(cf string, row *Row) Writer {
 func (w *MockWriter) InsertTtl(cf string, row *Row, ttl int) Writer {
 	if len(row.Key) == 0 {
 		w.err = &cassandra.InvalidRequestException{Why: "Key may not be empty"}
-		return
+		return w
 	}
 
 	rows := w.pool.Rows(cf)
@@ -126,7 +126,7 @@ func (w *MockWriter) DeltaCounters(cf string, row *Row) Writer {
 func (w *MockWriter) Delete(cf string, key []byte) Writer {
 	if len(key) == 0 {
 		w.err = &cassandra.InvalidRequestException{Why: "Key may not be empty"}
-		return
+		return w
 	}
 
 	rows := w.pool.Rows(cf)
@@ -155,7 +155,7 @@ func (w *MockWriter) Delete(cf string, key []byte) Writer {
 func (w *MockWriter) DeleteColumns(cf string, key []byte, columns [][]byte) Writer {
 	if len(key) == 0 {
 		w.err = &cassandra.InvalidRequestException{Why: "Key may not be empty"}
-		return
+		return w
 	}
 
 	rows := w.pool.Rows(cf)
