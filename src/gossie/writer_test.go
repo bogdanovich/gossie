@@ -3,9 +3,9 @@ package gossie
 import (
 	"testing"
 
-	"code.google.com/p/gomock/gomock"
 	. "github.com/betable/gossie/src/cassandra"
 	"github.com/betable/gossie/src/gossie/mock_cassandra"
+	"github.com/golang/mock/gomock"
 )
 
 type stubTransactionRunner struct {
