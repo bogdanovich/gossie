@@ -2,6 +2,7 @@ package mockgossie
 
 import (
 	"bytes"
+	"cassandra"
 	"sort"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 type MockWriter struct {
 	pool *MockConnectionPool
+	err  error
 }
 
 var _ Writer = &MockWriter{}
@@ -35,6 +37,11 @@ func (w *MockWriter) Insert(cf string, row *Row) Writer {
 }
 
 func (w *MockWriter) InsertTtl(cf string, row *Row, ttl int) Writer {
+	if len(row.Key) == 0 {
+		w.err = &cassandra.InvalidRequestException{Why: "Key may not be empty"}
+		return
+	}
+
 	rows := w.pool.Rows(cf)
 
 	t := thrift.Int64Ptr(now())
@@ -117,6 +124,11 @@ func (w *MockWriter) DeltaCounters(cf string, row *Row) Writer {
 }
 
 func (w *MockWriter) Delete(cf string, key []byte) Writer {
+	if len(key) == 0 {
+		w.err = &cassandra.InvalidRequestException{Why: "Key may not be empty"}
+		return
+	}
+
 	rows := w.pool.Rows(cf)
 
 	t := now()
@@ -141,6 +153,11 @@ func (w *MockWriter) Delete(cf string, key []byte) Writer {
 }
 
 func (w *MockWriter) DeleteColumns(cf string, key []byte, columns [][]byte) Writer {
+	if len(key) == 0 {
+		w.err = &cassandra.InvalidRequestException{Why: "Key may not be empty"}
+		return
+	}
+
 	rows := w.pool.Rows(cf)
 
 	t := now()
@@ -168,5 +185,5 @@ func (w *MockWriter) DeleteColumns(cf string, key []byte, columns [][]byte) Writ
 }
 
 func (w *MockWriter) Run() error {
-	return nil
+	return w.err
 }
