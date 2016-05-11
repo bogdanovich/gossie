@@ -70,8 +70,8 @@ func RegisterGossieType(name string, gossieType GossieType) {
 }
 
 func newField(index int, sf reflect.StructField) (*field, error) {
-	// ignore anon fields
-	if sf.Anonymous || sf.Name == "" {
+	// ignore fields without names
+	if sf.Name == "" {
 		return nil, nil
 	}
 
