@@ -71,6 +71,8 @@ type PoolOptions struct {
 	Retries          int                        // retry queries for Retries times before raising an error
 	Authentication   map[string]string          // if one or more keys are present, login() is called with the values from Authentication
 	TLSConfig        *tls.Config                // present if using SSL, otherwise nil
+
+	IdleConnectionTimeout time.Duration // close idle connection if they are open longer than this
 }
 
 var DefaultPoolOptions = PoolOptions{
@@ -83,6 +85,8 @@ var DefaultPoolOptions = PoolOptions{
 	Retries:          5,
 	// Authentication is empty
 	// TLSConfig is empty
+
+	IdleConnectionTimeout: time.Minute * 1,
 }
 
 const (
@@ -136,6 +140,9 @@ func (o *PoolOptions) mergeFrom(r *PoolOptions) {
 	}
 	if r.TLSConfig != nil {
 		o.TLSConfig = r.TLSConfig
+	}
+	if r.IdleConnectionTimeout != 0 {
+		o.IdleConnectionTimeout = r.IdleConnectionTimeout
 	}
 }
 
@@ -318,9 +325,19 @@ func (cp *connectionPool) acquire() (*connection, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, ok := n.available.Pop()
-	if ok {
-		return c, nil
+	// try to find an active connection for this node
+	var c *connection
+	ok := true
+	for ok {
+		c, ok = n.available.Pop()
+		if ok {
+			if c.validUntil.After(time.Now()) {
+				return c, nil
+			}
+			// connection is too old, close it and try the next one
+			c.close()
+			c = nil
+		}
 	}
 	c, err = newConnection(n, cp.keyspace, cp.options.Timeout, cp.options.Authentication, cp.options.TLSConfig)
 	if err == ErrorConnectionTimeout {
@@ -330,6 +347,7 @@ func (cp *connectionPool) acquire() (*connection, error) {
 }
 
 func (cp *connectionPool) release(c *connection) {
+	c.validUntil = time.Now().Add(cp.options.IdleConnectionTimeout)
 	c.node.available.Push(c)
 }
 
@@ -370,9 +388,10 @@ func (cp *connectionPool) Close() {
 }
 
 type connection struct {
-	transport *thrift.TFramedTransport
-	client    cassandra.Cassandra
-	node      *node
+	transport  *thrift.TFramedTransport
+	client     cassandra.Cassandra
+	node       *node
+	validUntil time.Time
 }
 
 func newConnection(n *node, keyspace string, timeout time.Duration, authentication map[string]string, tlsConfig *tls.Config) (*connection, error) {
