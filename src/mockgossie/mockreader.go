@@ -14,8 +14,7 @@ type MockReader struct {
 	cf          string
 	slice       *Slice
 
-	startToken string
-	endToken   string
+	startKey []byte
 }
 
 var _ Reader = &MockReader{}
@@ -56,6 +55,11 @@ func (m *MockReader) SetTokenRange(startToken, endToken string) Reader {
 }
 
 func (m *MockReader) SetKeyRange(startKey, endKey []byte) Reader {
+	// For now, only allow `(startKey, nil)` as a common case (resume scan using last key)
+	if startKey != nil && endKey == nil {
+		m.startKey = startKey
+		return m
+	}
 	panic("not implemented")
 }
 
@@ -135,6 +139,8 @@ func (m *MockReader) RangeScan() (<-chan *Row, <-chan error) {
 	data := make(chan *Row)
 	errc := make(chan error)
 
+	startFound := m.startKey == nil
+
 	go func() {
 		defer close(data)
 		defer close(errc)
@@ -142,6 +148,16 @@ func (m *MockReader) RangeScan() (<-chan *Row, <-chan error) {
 		rows := m.pool.Rows(m.cf)
 		for _, row := range rows {
 			checkExpired(row)
+			if !startFound {
+				// If a startKey has been set, don't return results until we
+				// reach that portion of the range (inclusive)
+				if compareRowKeys(row.Key, m.startKey) >= 0 {
+					startFound = true
+				} else {
+					continue
+				}
+			}
+
 			data <- m.sliceRow(row)
 		}
 	}()
