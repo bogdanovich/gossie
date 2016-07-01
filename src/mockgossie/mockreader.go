@@ -55,6 +55,10 @@ func (m *MockReader) SetTokenRange(startToken, endToken string) Reader {
 	panic("not implemented")
 }
 
+func (m *MockReader) SetKeyRange(startKey, endKey []byte) Reader {
+	panic("not implemented")
+}
+
 func (m *MockReader) Get(key []byte) (*Row, error) {
 	rows := m.pool.Rows(m.cf)
 
