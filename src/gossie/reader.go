@@ -114,12 +114,19 @@ type Reader interface {
 	// Deprecated, please use RangeGet with Where() instead
 	IndexedGet(indexedRange *IndexedRange) ([]*Row, error)
 
-	//Set range to use with RangeScan
+	//Set exclusive range to use with RangeScan
 	//Default token range is -1 to 170141183460469231731687303715884105728
 	SetTokenRange(startToken, endToken string) Reader
 
+	//Set inclusive key range to use with RangeScan
+	//Use `nil` for a field to specify that the start or end of the token range should be used
+	//Thus using `SetKeyRange(startKey, nil)` will resume a keyspace scan starting at (and including) startKey
+	//If you want to iterate the entire keyspace starting at a key, have startKey == endKey
+	SetKeyRange(startKey, endKey []byte) Reader
+
 	//Set the page size for RangeScan
 	//Default page size is 100 rows
+	//NOTE this applies when using SetKeyRange as well, and should be renamed
 	SetTokenRangeCount(count int) Reader
 
 	// Scan a range This function will call the callback
@@ -148,6 +155,8 @@ type reader struct {
 	expressions      []*IndexExpression
 	startToken       string
 	endToken         string
+	startKey         []byte
+	endKey           []byte
 	tokenRangeCount  int
 	columnParent     ColumnParent
 }
@@ -161,6 +170,11 @@ func newReader(cp *connectionPool, cl ConsistencyLevel) *reader {
 
 func (r *reader) SetTokenRange(startToken, endToken string) Reader {
 	r.startToken, r.endToken = startToken, endToken
+	return r
+}
+
+func (r *reader) SetKeyRange(startKey, endKey []byte) Reader {
+	r.startKey, r.endKey = startKey, endKey
 	return r
 }
 
@@ -426,13 +440,19 @@ func (r *reader) RangeScan() (<-chan *Row, <-chan error) {
 	kr := NewKeyRange()
 	if len(r.startToken) != 0 {
 		kr.StartToken = &r.startToken
-	} else {
+	} else if r.startKey == nil {
 		kr.StartToken = &DEF_START_TOKEN
 	}
 	if len(r.endToken) != 0 {
 		kr.EndToken = &r.endToken
-	} else {
+	} else if r.endKey == nil {
 		kr.EndToken = &DEF_END_TOKEN
+	}
+	if r.startKey != nil {
+		kr.StartKey = r.startKey
+	}
+	if r.endKey != nil {
+		kr.EndKey = r.endKey
 	}
 	if len(r.expressions) != 0 {
 		kr.RowFilter = r.expressions
@@ -444,6 +464,7 @@ func (r *reader) RangeScan() (<-chan *Row, <-chan error) {
 
 	data := make(chan *Row)
 	rerr := make(chan error)
+	firstRun := true
 
 	go func() {
 		defer close(rerr)
@@ -467,7 +488,9 @@ func (r *reader) RangeScan() (<-chan *Row, <-chan error) {
 				//phew. done
 				return
 			}
-			if kr.StartKey != nil && bytes.Equal(ksv[0].Key, kr.StartKey) {
+			// If we are continuing the iteration, skip the last result we already saw
+			// (StartKey is inclusive)
+			if !firstRun && bytes.Equal(ksv[0].Key, kr.StartKey) {
 				//AP: I'm sending a diarrhea beam your way, dear designer of cassandra iteration
 				ksv = ksv[1:]
 			}
@@ -486,6 +509,8 @@ func (r *reader) RangeScan() (<-chan *Row, <-chan error) {
 					data <- row
 				}
 			}
+
+			firstRun = false
 		}
 	}()
 	return data, rerr
