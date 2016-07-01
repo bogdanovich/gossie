@@ -463,7 +463,7 @@ func (r *reader) RangeScan() (<-chan *Row, <-chan error) {
 	sp := r.buildPredicate()
 
 	data := make(chan *Row)
-	rerr := make(chan error)
+	rerr := make(chan error, 1)
 	firstRun := true
 
 	go func() {
