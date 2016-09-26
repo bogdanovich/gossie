@@ -394,3 +394,7 @@ func (r *StreamingResult) Next(destination interface{}) error {
 	}
 	return err
 }
+
+func (r *StreamingResult) Row() *Row {
+	return r.row
+}
