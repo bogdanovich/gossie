@@ -17,7 +17,7 @@ import (
 	"math/big"
 	"sort"
 
-	"github.com/apache/thrift/lib/go/thrift"
+	"git.apache.org/thrift.git/lib/go/thrift"
 	. "github.com/betable/gossie/src/cassandra"
 	. "github.com/betable/gossie/src/gossie"
 )
