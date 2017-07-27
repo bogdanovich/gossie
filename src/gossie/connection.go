@@ -2,6 +2,7 @@
 package gossie
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -183,7 +184,7 @@ func NewConnectionPool(nodes []string, keyspace string, options PoolOptions) (Co
 	var ksDef *cassandra.KsDef
 	err := cp.run(func(c *connection) error {
 		var err error
-		ksDef, err = c.client.DescribeKeyspace(cp.keyspace)
+		ksDef, err = c.client.DescribeKeyspace(context.TODO(), cp.keyspace)
 		return err
 	})
 
@@ -417,7 +418,7 @@ func newConnection(n *node, keyspace string, timeout time.Duration, authenticati
 		return nil, err
 	}
 
-	version, err := c.client.DescribeVersion()
+	version, err := c.client.DescribeVersion(context.TODO())
 	if err != nil {
 		c.close()
 		return nil, err
@@ -438,7 +439,7 @@ func newConnection(n *node, keyspace string, timeout time.Duration, authenticati
 	if len(authentication) > 0 {
 		ar := cassandra.NewAuthenticationRequest()
 		ar.Credentials = authentication
-		err := c.client.Login(ar)
+		err := c.client.Login(context.TODO(), ar)
 		if err != nil {
 			c.close()
 			switch err.(type) {
@@ -452,7 +453,7 @@ func newConnection(n *node, keyspace string, timeout time.Duration, authenticati
 		}
 	}
 
-	err = c.client.SetKeyspace(keyspace)
+	err = c.client.SetKeyspace(context.TODO(), keyspace)
 	if err != nil {
 		c.close()
 		switch err.(type) {

@@ -1,6 +1,8 @@
 package gossie
 
 import (
+	"context"
+
 	"git.apache.org/thrift.git/lib/go/thrift"
 	"github.com/betable/gossie/src/cassandra"
 )
@@ -82,7 +84,7 @@ func (w *writer) InsertTtl(cf string, row *Row, ttl int) Writer {
 		c.Name = col.Name
 		c.Value = col.Value
 		if ttl > 0 {
-			c.Ttl = thrift.Int32Ptr(int32(ttl))
+			c.TTL = thrift.Int32Ptr(int32(ttl))
 		}
 		if col.Timestamp != nil {
 			c.Timestamp = col.Timestamp
@@ -144,7 +146,7 @@ func (w *writer) DeleteSlice(cf string, key []byte, slice *Slice) Writer {
 
 func (w *writer) Run() error {
 	toRun := func(c *connection) error {
-		return c.client.BatchMutate(w.writers, cassandra.ConsistencyLevel(w.consistencyLevel))
+		return c.client.BatchMutate(context.TODO(), w.writers, cassandra.ConsistencyLevel(w.consistencyLevel))
 	}
 	if w.usedCounters {
 		return w.pool.runWithRetries(toRun, 1)

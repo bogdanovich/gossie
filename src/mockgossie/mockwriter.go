@@ -49,11 +49,11 @@ func (w *MockWriter) InsertTtl(cf string, row *Row, ttl int) Writer {
 			c.Timestamp = t
 		}
 		if ttl > 0 {
-			c.Ttl = thrift.Int32Ptr(int32(ttl))
+			c.TTL = thrift.Int32Ptr(int32(ttl))
 		}
-		if c.Ttl != nil {
+		if c.TTL != nil {
 			// reset to the actual time to expire
-			c.Ttl = thrift.Int32Ptr(int32(now()/1e6) + *c.Ttl)
+			c.TTL = thrift.Int32Ptr(int32(now()/1e6) + *c.TTL)
 		}
 	}
 
@@ -74,7 +74,7 @@ func (w *MockWriter) InsertTtl(cf string, row *Row, ttl int) Writer {
 				}
 				if *c.Timestamp >= et {
 					ec.Value = c.Value
-					ec.Ttl = c.Ttl
+					ec.TTL = c.TTL
 					ec.Timestamp = c.Timestamp
 				}
 			} else {
@@ -112,8 +112,8 @@ func checkExpired(r *Row) {
 }
 
 func isExpired(c *Column) bool {
-	if c.Ttl != nil {
-		return int32(now()/1e6) > *c.Ttl
+	if c.TTL != nil {
+		return int32(now()/1e6) > *c.TTL
 	}
 	return false
 }

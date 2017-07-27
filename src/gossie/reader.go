@@ -2,6 +2,7 @@ package gossie
 
 import (
 	"bytes"
+	"context"
 	"errors"
 
 	"github.com/golang/glog"
@@ -289,7 +290,7 @@ func (r *reader) Get(key []byte) (*Row, error) {
 	var ret []*ColumnOrSuperColumn
 	err := r.pool.run(func(c *connection) error {
 		var err error
-		ret, err = c.client.GetSlice(key, &r.columnParent, sp, r.consistencyLevel)
+		ret, err = c.client.GetSlice(context.TODO(), key, &r.columnParent, sp, r.consistencyLevel)
 		return err
 	})
 
@@ -310,7 +311,7 @@ func (r *reader) Count(key []byte) (int, error) {
 	var ret int32
 	err := r.pool.run(func(c *connection) error {
 		var err error
-		ret, err = c.client.GetCount(key, &r.columnParent, sp, r.consistencyLevel)
+		ret, err = c.client.GetCount(context.TODO(), key, &r.columnParent, sp, r.consistencyLevel)
 		return err
 	})
 
@@ -335,7 +336,7 @@ func (r *reader) MultiGet(keys [][]byte) ([]*Row, error) {
 	var ret map[string][]*ColumnOrSuperColumn
 	err := r.pool.run(func(c *connection) error {
 		var err error
-		ret, err = c.client.MultigetSlice(keys, &r.columnParent, sp, r.consistencyLevel)
+		ret, err = c.client.MultigetSlice(context.TODO(), keys, &r.columnParent, sp, r.consistencyLevel)
 		return err
 	})
 
@@ -360,7 +361,7 @@ func (r *reader) MultiCount(keys [][]byte) ([]*RowColumnCount, error) {
 	var ret map[string]int32
 	err := r.pool.run(func(c *connection) error {
 		var err error
-		ret, err = c.client.MultigetCount(keys, &r.columnParent, sp, r.consistencyLevel)
+		ret, err = c.client.MultigetCount(context.TODO(), keys, &r.columnParent, sp, r.consistencyLevel)
 		return err
 	})
 
@@ -392,7 +393,7 @@ func (r *reader) RangeGet(rang *Range) ([]*Row, error) {
 	var ret []*KeySlice
 	err := r.pool.run(func(c *connection) error {
 		var err error
-		ret, err = c.client.GetRangeSlices(&r.columnParent, sp, kr, r.consistencyLevel)
+		ret, err = c.client.GetRangeSlices(context.TODO(), &r.columnParent, sp, kr, r.consistencyLevel)
 		return err
 	})
 
@@ -422,7 +423,7 @@ func (r *reader) IndexedGet(rang *IndexedRange) ([]*Row, error) {
 	var ret []*KeySlice
 	err := r.pool.run(func(c *connection) error {
 		var err error
-		ret, err = c.client.GetIndexedSlices(&r.columnParent, ic, sp, r.consistencyLevel)
+		ret, err = c.client.GetIndexedSlices(context.TODO(), &r.columnParent, ic, sp, r.consistencyLevel)
 		return err
 	})
 
@@ -474,7 +475,7 @@ func (r *reader) RangeScan() (<-chan *Row, <-chan error) {
 			var ksv []*KeySlice
 			err := r.pool.run(func(c *connection) error {
 				var err error
-				ksv, err = c.client.GetRangeSlices(&r.columnParent, sp, kr, r.consistencyLevel)
+				ksv, err = c.client.GetRangeSlices(context.TODO(), &r.columnParent, sp, kr, r.consistencyLevel)
 				return err
 			})
 
@@ -526,7 +527,7 @@ func (r *reader) WideRowScan(key, startColumn []byte, batchSize int32, callback 
 	for {
 		err := r.pool.run(func(c *connection) error {
 			var err error
-			ret, err = c.client.GetPagedSlice(r.columnParent.ColumnFamily, keyRange, startColumn, r.consistencyLevel)
+			ret, err = c.client.GetPagedSlice(context.TODO(), r.columnParent.ColumnFamily, keyRange, startColumn, r.consistencyLevel)
 			return err
 		})
 
