@@ -9515,13 +9515,13 @@ type Cassandra interface {
   // for each schema version present in the cluster, returns a list of nodes at that version.
   // hosts that do not respond will be under the key DatabaseDescriptor.INITIAL_VERSION.
   // the cluster is all on the same version if the size of the map is 1.
-  DescribeSchemaVersions(ctx context.Context, ) (r map[string][]string, err error)
+  DescribeSchemaVersions(ctx context.Context) (r map[string][]string, err error)
   // list the defined keyspaces in this cluster
-  DescribeKeyspaces(ctx context.Context, ) (r []*KsDef, err error)
+  DescribeKeyspaces(ctx context.Context) (r []*KsDef, err error)
   // get the cluster name
-  DescribeClusterName(ctx context.Context, ) (r string, err error)
+  DescribeClusterName(ctx context.Context) (r string, err error)
   // get the thrift api version
-  DescribeVersion(ctx context.Context, ) (r string, err error)
+  DescribeVersion(ctx context.Context) (r string, err error)
   // get the token ring: a map of ranges to host addresses,
   // represented as a set of TokenRange instead of a map from range
   // to list of endpoints, because you can't use Thrift structs as
@@ -9542,11 +9542,11 @@ type Cassandra interface {
   // get the mapping between token->node ip
   // without taking replication into consideration
   // https://issues.apache.org/jira/browse/CASSANDRA-4092
-  DescribeTokenMap(ctx context.Context, ) (r map[string]string, err error)
+  DescribeTokenMap(ctx context.Context) (r map[string]string, err error)
   // returns the partitioner used by this cluster
-  DescribePartitioner(ctx context.Context, ) (r string, err error)
+  DescribePartitioner(ctx context.Context) (r string, err error)
   // returns the snitch used by this cluster
-  DescribeSnitch(ctx context.Context, ) (r string, err error)
+  DescribeSnitch(ctx context.Context) (r string, err error)
   // describe specified keyspace
   // 
   // Parameters:
@@ -9566,7 +9566,7 @@ type Cassandra interface {
   DescribeSplits(ctx context.Context, cfName string, start_token string, end_token string, keys_per_split int32) (r []string, err error)
   // Enables tracing for the next query in this connection and returns the UUID for that trace session
   // The next query will be traced idependently of trace probability and the returned UUID can be used to query the trace keyspace
-  TraceNextQuery(ctx context.Context, ) (r []byte, err error)
+  TraceNextQuery(ctx context.Context) (r []byte, err error)
   // Parameters:
   //  - CfName
   //  - StartToken
@@ -9654,190 +9654,63 @@ type Cassandra interface {
 }
 
 type CassandraClient struct {
-  Transport thrift.TTransport
-  ProtocolFactory thrift.TProtocolFactory
-  InputProtocol thrift.TProtocol
-  OutputProtocol thrift.TProtocol
-  SeqId int32
+  c thrift.TClient
 }
 
+// Deprecated: Use NewCassandra instead
 func NewCassandraClientFactory(t thrift.TTransport, f thrift.TProtocolFactory) *CassandraClient {
-  return &CassandraClient{Transport: t,
-    ProtocolFactory: f,
-    InputProtocol: f.GetProtocol(t),
-    OutputProtocol: f.GetProtocol(t),
-    SeqId: 0,
+  return &CassandraClient{
+    c: thrift.NewTStandardClient(f.GetProtocol(t), f.GetProtocol(t)),
   }
 }
 
+// Deprecated: Use NewCassandra instead
 func NewCassandraClientProtocol(t thrift.TTransport, iprot thrift.TProtocol, oprot thrift.TProtocol) *CassandraClient {
-  return &CassandraClient{Transport: t,
-    ProtocolFactory: nil,
-    InputProtocol: iprot,
-    OutputProtocol: oprot,
-    SeqId: 0,
+  return &CassandraClient{
+    c: thrift.NewTStandardClient(iprot, oprot),
+  }
+}
+
+func NewCassandraClient(c thrift.TClient) *CassandraClient {
+  return &CassandraClient{
+    c: c,
   }
 }
 
 // Parameters:
 //  - AuthRequest
 func (p *CassandraClient) Login(ctx context.Context, auth_request *AuthenticationRequest) (err error) {
-  if err = p.sendLogin(auth_request); err != nil { return }
-  return p.recvLogin()
-}
+  var _args34 CassandraLoginArgs
+  _args34.AuthRequest = auth_request
+  var _result35 CassandraLoginResult
+  if err = p.c.Call(ctx, "login", &_args34, &_result35); err != nil {
+    return
+  }
+  switch {
+  case _result35.Authnx!= nil:
+    return _result35.Authnx
+  case _result35.Authzx!= nil:
+    return _result35.Authzx
+  }
 
-func (p *CassandraClient) sendLogin(auth_request *AuthenticationRequest)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("login", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraLoginArgs{
-  AuthRequest : auth_request,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvLogin() (err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "login" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "login failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "login failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error34 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error35 error
-    error35, err = error34.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error35
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "login failed: invalid message type")
-    return
-  }
-  result := CassandraLoginResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Authnx != nil {
-    err = result.Authnx
-    return 
-  } else   if result.Authzx != nil {
-    err = result.Authzx
-    return 
-  }
-  return
+  return nil
 }
 
 // Parameters:
 //  - Keyspace
 func (p *CassandraClient) SetKeyspace(ctx context.Context, keyspace string) (err error) {
-  if err = p.sendSetKeyspace(keyspace); err != nil { return }
-  return p.recvSetKeyspace()
-}
+  var _args36 CassandraSetKeyspaceArgs
+  _args36.Keyspace = keyspace
+  var _result37 CassandraSetKeyspaceResult
+  if err = p.c.Call(ctx, "set_keyspace", &_args36, &_result37); err != nil {
+    return
+  }
+  switch {
+  case _result37.Ire!= nil:
+    return _result37.Ire
+  }
 
-func (p *CassandraClient) sendSetKeyspace(keyspace string)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("set_keyspace", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraSetKeyspaceArgs{
-  Keyspace : keyspace,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvSetKeyspace() (err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "set_keyspace" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "set_keyspace failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "set_keyspace failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error36 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error37 error
-    error37, err = error36.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error37
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "set_keyspace failed: invalid message type")
-    return
-  }
-  result := CassandraSetKeyspaceResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  }
-  return
+  return nil
 }
 
 // Get the Column or SuperColumn at the given column_path. If no value is present, NotFoundException is thrown. (This is
@@ -9848,92 +9721,26 @@ func (p *CassandraClient) recvSetKeyspace() (err error) {
 //  - ColumnPath
 //  - ConsistencyLevel
 func (p *CassandraClient) Get(ctx context.Context, key []byte, column_path *ColumnPath, consistency_level ConsistencyLevel) (r *ColumnOrSuperColumn, err error) {
-  if err = p.sendGet(key, column_path, consistency_level); err != nil { return }
-  return p.recvGet()
-}
+  var _args38 CassandraGetArgs
+  _args38.Key = key
+  _args38.ColumnPath = column_path
+  _args38.ConsistencyLevel = consistency_level
+  var _result39 CassandraGetResult
+  if err = p.c.Call(ctx, "get", &_args38, &_result39); err != nil {
+    return
+  }
+  switch {
+  case _result39.Ire!= nil:
+    return r, _result39.Ire
+  case _result39.Nfe!= nil:
+    return r, _result39.Nfe
+  case _result39.Ue!= nil:
+    return r, _result39.Ue
+  case _result39.Te!= nil:
+    return r, _result39.Te
+  }
 
-func (p *CassandraClient) sendGet(key []byte, column_path *ColumnPath, consistency_level ConsistencyLevel)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("get", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraGetArgs{
-  Key : key,
-  ColumnPath : column_path,
-  ConsistencyLevel : consistency_level,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvGet() (value *ColumnOrSuperColumn, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "get" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "get failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "get failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error38 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error39 error
-    error39, err = error38.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error39
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "get failed: invalid message type")
-    return
-  }
-  result := CassandraGetResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Nfe != nil {
-    err = result.Nfe
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result39.GetSuccess(), nil
 }
 
 // Get the group of columns contained by column_parent (either a ColumnFamily name or a ColumnFamily/SuperColumn name
@@ -9945,90 +9752,25 @@ func (p *CassandraClient) recvGet() (value *ColumnOrSuperColumn, err error) {
 //  - Predicate
 //  - ConsistencyLevel
 func (p *CassandraClient) GetSlice(ctx context.Context, key []byte, column_parent *ColumnParent, predicate *SlicePredicate, consistency_level ConsistencyLevel) (r []*ColumnOrSuperColumn, err error) {
-  if err = p.sendGetSlice(key, column_parent, predicate, consistency_level); err != nil { return }
-  return p.recvGetSlice()
-}
+  var _args40 CassandraGetSliceArgs
+  _args40.Key = key
+  _args40.ColumnParent = column_parent
+  _args40.Predicate = predicate
+  _args40.ConsistencyLevel = consistency_level
+  var _result41 CassandraGetSliceResult
+  if err = p.c.Call(ctx, "get_slice", &_args40, &_result41); err != nil {
+    return
+  }
+  switch {
+  case _result41.Ire!= nil:
+    return r, _result41.Ire
+  case _result41.Ue!= nil:
+    return r, _result41.Ue
+  case _result41.Te!= nil:
+    return r, _result41.Te
+  }
 
-func (p *CassandraClient) sendGetSlice(key []byte, column_parent *ColumnParent, predicate *SlicePredicate, consistency_level ConsistencyLevel)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("get_slice", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraGetSliceArgs{
-  Key : key,
-  ColumnParent : column_parent,
-  Predicate : predicate,
-  ConsistencyLevel : consistency_level,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvGetSlice() (value []*ColumnOrSuperColumn, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "get_slice" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "get_slice failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "get_slice failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error40 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error41 error
-    error41, err = error40.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error41
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "get_slice failed: invalid message type")
-    return
-  }
-  result := CassandraGetSliceResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result41.GetSuccess(), nil
 }
 
 // returns the number of columns matching <code>predicate</code> for a particular <code>key</code>,
@@ -10040,90 +9782,25 @@ func (p *CassandraClient) recvGetSlice() (value []*ColumnOrSuperColumn, err erro
 //  - Predicate
 //  - ConsistencyLevel
 func (p *CassandraClient) GetCount(ctx context.Context, key []byte, column_parent *ColumnParent, predicate *SlicePredicate, consistency_level ConsistencyLevel) (r int32, err error) {
-  if err = p.sendGetCount(key, column_parent, predicate, consistency_level); err != nil { return }
-  return p.recvGetCount()
-}
+  var _args42 CassandraGetCountArgs
+  _args42.Key = key
+  _args42.ColumnParent = column_parent
+  _args42.Predicate = predicate
+  _args42.ConsistencyLevel = consistency_level
+  var _result43 CassandraGetCountResult
+  if err = p.c.Call(ctx, "get_count", &_args42, &_result43); err != nil {
+    return
+  }
+  switch {
+  case _result43.Ire!= nil:
+    return r, _result43.Ire
+  case _result43.Ue!= nil:
+    return r, _result43.Ue
+  case _result43.Te!= nil:
+    return r, _result43.Te
+  }
 
-func (p *CassandraClient) sendGetCount(key []byte, column_parent *ColumnParent, predicate *SlicePredicate, consistency_level ConsistencyLevel)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("get_count", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraGetCountArgs{
-  Key : key,
-  ColumnParent : column_parent,
-  Predicate : predicate,
-  ConsistencyLevel : consistency_level,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvGetCount() (value int32, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "get_count" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "get_count failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "get_count failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error42 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error43 error
-    error43, err = error42.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error43
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "get_count failed: invalid message type")
-    return
-  }
-  result := CassandraGetCountResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result43.GetSuccess(), nil
 }
 
 // Performs a get_slice for column_parent and predicate for the given keys in parallel.
@@ -10134,90 +9811,25 @@ func (p *CassandraClient) recvGetCount() (value int32, err error) {
 //  - Predicate
 //  - ConsistencyLevel
 func (p *CassandraClient) MultigetSlice(ctx context.Context, keys [][]byte, column_parent *ColumnParent, predicate *SlicePredicate, consistency_level ConsistencyLevel) (r map[string][]*ColumnOrSuperColumn, err error) {
-  if err = p.sendMultigetSlice(keys, column_parent, predicate, consistency_level); err != nil { return }
-  return p.recvMultigetSlice()
-}
+  var _args44 CassandraMultigetSliceArgs
+  _args44.Keys = keys
+  _args44.ColumnParent = column_parent
+  _args44.Predicate = predicate
+  _args44.ConsistencyLevel = consistency_level
+  var _result45 CassandraMultigetSliceResult
+  if err = p.c.Call(ctx, "multiget_slice", &_args44, &_result45); err != nil {
+    return
+  }
+  switch {
+  case _result45.Ire!= nil:
+    return r, _result45.Ire
+  case _result45.Ue!= nil:
+    return r, _result45.Ue
+  case _result45.Te!= nil:
+    return r, _result45.Te
+  }
 
-func (p *CassandraClient) sendMultigetSlice(keys [][]byte, column_parent *ColumnParent, predicate *SlicePredicate, consistency_level ConsistencyLevel)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("multiget_slice", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraMultigetSliceArgs{
-  Keys : keys,
-  ColumnParent : column_parent,
-  Predicate : predicate,
-  ConsistencyLevel : consistency_level,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvMultigetSlice() (value map[string][]*ColumnOrSuperColumn, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "multiget_slice" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "multiget_slice failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "multiget_slice failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error44 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error45 error
-    error45, err = error44.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error45
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "multiget_slice failed: invalid message type")
-    return
-  }
-  result := CassandraMultigetSliceResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result45.GetSuccess(), nil
 }
 
 // Perform a get_count in parallel on the given list<binary> keys. The return value maps keys to the count found.
@@ -10228,90 +9840,25 @@ func (p *CassandraClient) recvMultigetSlice() (value map[string][]*ColumnOrSuper
 //  - Predicate
 //  - ConsistencyLevel
 func (p *CassandraClient) MultigetCount(ctx context.Context, keys [][]byte, column_parent *ColumnParent, predicate *SlicePredicate, consistency_level ConsistencyLevel) (r map[string]int32, err error) {
-  if err = p.sendMultigetCount(keys, column_parent, predicate, consistency_level); err != nil { return }
-  return p.recvMultigetCount()
-}
+  var _args46 CassandraMultigetCountArgs
+  _args46.Keys = keys
+  _args46.ColumnParent = column_parent
+  _args46.Predicate = predicate
+  _args46.ConsistencyLevel = consistency_level
+  var _result47 CassandraMultigetCountResult
+  if err = p.c.Call(ctx, "multiget_count", &_args46, &_result47); err != nil {
+    return
+  }
+  switch {
+  case _result47.Ire!= nil:
+    return r, _result47.Ire
+  case _result47.Ue!= nil:
+    return r, _result47.Ue
+  case _result47.Te!= nil:
+    return r, _result47.Te
+  }
 
-func (p *CassandraClient) sendMultigetCount(keys [][]byte, column_parent *ColumnParent, predicate *SlicePredicate, consistency_level ConsistencyLevel)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("multiget_count", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraMultigetCountArgs{
-  Keys : keys,
-  ColumnParent : column_parent,
-  Predicate : predicate,
-  ConsistencyLevel : consistency_level,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvMultigetCount() (value map[string]int32, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "multiget_count" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "multiget_count failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "multiget_count failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error46 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error47 error
-    error47, err = error46.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error47
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "multiget_count failed: invalid message type")
-    return
-  }
-  result := CassandraMultigetCountResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result47.GetSuccess(), nil
 }
 
 // returns a subset of columns for a contiguous range of keys.
@@ -10322,90 +9869,25 @@ func (p *CassandraClient) recvMultigetCount() (value map[string]int32, err error
 //  - Range
 //  - ConsistencyLevel
 func (p *CassandraClient) GetRangeSlices(ctx context.Context, column_parent *ColumnParent, predicate *SlicePredicate, range_a1 *KeyRange, consistency_level ConsistencyLevel) (r []*KeySlice, err error) {
-  if err = p.sendGetRangeSlices(column_parent, predicate, range_a1, consistency_level); err != nil { return }
-  return p.recvGetRangeSlices()
-}
+  var _args48 CassandraGetRangeSlicesArgs
+  _args48.ColumnParent = column_parent
+  _args48.Predicate = predicate
+  _args48.Range = range_a1
+  _args48.ConsistencyLevel = consistency_level
+  var _result49 CassandraGetRangeSlicesResult
+  if err = p.c.Call(ctx, "get_range_slices", &_args48, &_result49); err != nil {
+    return
+  }
+  switch {
+  case _result49.Ire!= nil:
+    return r, _result49.Ire
+  case _result49.Ue!= nil:
+    return r, _result49.Ue
+  case _result49.Te!= nil:
+    return r, _result49.Te
+  }
 
-func (p *CassandraClient) sendGetRangeSlices(column_parent *ColumnParent, predicate *SlicePredicate, range_a1 *KeyRange, consistency_level ConsistencyLevel)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("get_range_slices", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraGetRangeSlicesArgs{
-  ColumnParent : column_parent,
-  Predicate : predicate,
-  Range : range_a1,
-  ConsistencyLevel : consistency_level,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvGetRangeSlices() (value []*KeySlice, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "get_range_slices" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "get_range_slices failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "get_range_slices failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error48 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error49 error
-    error49, err = error48.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error49
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "get_range_slices failed: invalid message type")
-    return
-  }
-  result := CassandraGetRangeSlicesResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result49.GetSuccess(), nil
 }
 
 // returns a range of columns, wrapping to the next rows if necessary to collect max_results.
@@ -10416,90 +9898,25 @@ func (p *CassandraClient) recvGetRangeSlices() (value []*KeySlice, err error) {
 //  - StartColumn
 //  - ConsistencyLevel
 func (p *CassandraClient) GetPagedSlice(ctx context.Context, column_family string, range_a1 *KeyRange, start_column []byte, consistency_level ConsistencyLevel) (r []*KeySlice, err error) {
-  if err = p.sendGetPagedSlice(column_family, range_a1, start_column, consistency_level); err != nil { return }
-  return p.recvGetPagedSlice()
-}
+  var _args50 CassandraGetPagedSliceArgs
+  _args50.ColumnFamily = column_family
+  _args50.Range = range_a1
+  _args50.StartColumn = start_column
+  _args50.ConsistencyLevel = consistency_level
+  var _result51 CassandraGetPagedSliceResult
+  if err = p.c.Call(ctx, "get_paged_slice", &_args50, &_result51); err != nil {
+    return
+  }
+  switch {
+  case _result51.Ire!= nil:
+    return r, _result51.Ire
+  case _result51.Ue!= nil:
+    return r, _result51.Ue
+  case _result51.Te!= nil:
+    return r, _result51.Te
+  }
 
-func (p *CassandraClient) sendGetPagedSlice(column_family string, range_a1 *KeyRange, start_column []byte, consistency_level ConsistencyLevel)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("get_paged_slice", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraGetPagedSliceArgs{
-  ColumnFamily : column_family,
-  Range : range_a1,
-  StartColumn : start_column,
-  ConsistencyLevel : consistency_level,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvGetPagedSlice() (value []*KeySlice, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "get_paged_slice" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "get_paged_slice failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "get_paged_slice failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error50 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error51 error
-    error51, err = error50.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error51
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "get_paged_slice failed: invalid message type")
-    return
-  }
-  result := CassandraGetPagedSliceResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result51.GetSuccess(), nil
 }
 
 // Returns the subset of columns specified in SlicePredicate for the rows matching the IndexClause
@@ -10511,90 +9928,25 @@ func (p *CassandraClient) recvGetPagedSlice() (value []*KeySlice, err error) {
 //  - ColumnPredicate
 //  - ConsistencyLevel
 func (p *CassandraClient) GetIndexedSlices(ctx context.Context, column_parent *ColumnParent, index_clause *IndexClause, column_predicate *SlicePredicate, consistency_level ConsistencyLevel) (r []*KeySlice, err error) {
-  if err = p.sendGetIndexedSlices(column_parent, index_clause, column_predicate, consistency_level); err != nil { return }
-  return p.recvGetIndexedSlices()
-}
+  var _args52 CassandraGetIndexedSlicesArgs
+  _args52.ColumnParent = column_parent
+  _args52.IndexClause = index_clause
+  _args52.ColumnPredicate = column_predicate
+  _args52.ConsistencyLevel = consistency_level
+  var _result53 CassandraGetIndexedSlicesResult
+  if err = p.c.Call(ctx, "get_indexed_slices", &_args52, &_result53); err != nil {
+    return
+  }
+  switch {
+  case _result53.Ire!= nil:
+    return r, _result53.Ire
+  case _result53.Ue!= nil:
+    return r, _result53.Ue
+  case _result53.Te!= nil:
+    return r, _result53.Te
+  }
 
-func (p *CassandraClient) sendGetIndexedSlices(column_parent *ColumnParent, index_clause *IndexClause, column_predicate *SlicePredicate, consistency_level ConsistencyLevel)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("get_indexed_slices", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraGetIndexedSlicesArgs{
-  ColumnParent : column_parent,
-  IndexClause : index_clause,
-  ColumnPredicate : column_predicate,
-  ConsistencyLevel : consistency_level,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvGetIndexedSlices() (value []*KeySlice, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "get_indexed_slices" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "get_indexed_slices failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "get_indexed_slices failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error52 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error53 error
-    error53, err = error52.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error53
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "get_indexed_slices failed: invalid message type")
-    return
-  }
-  result := CassandraGetIndexedSlicesResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result53.GetSuccess(), nil
 }
 
 // Insert a Column at the given column_parent.column_family and optional column_parent.super_column.
@@ -10605,89 +9957,25 @@ func (p *CassandraClient) recvGetIndexedSlices() (value []*KeySlice, err error) 
 //  - Column
 //  - ConsistencyLevel
 func (p *CassandraClient) Insert(ctx context.Context, key []byte, column_parent *ColumnParent, column *Column, consistency_level ConsistencyLevel) (err error) {
-  if err = p.sendInsert(key, column_parent, column, consistency_level); err != nil { return }
-  return p.recvInsert()
-}
+  var _args54 CassandraInsertArgs
+  _args54.Key = key
+  _args54.ColumnParent = column_parent
+  _args54.Column = column
+  _args54.ConsistencyLevel = consistency_level
+  var _result55 CassandraInsertResult
+  if err = p.c.Call(ctx, "insert", &_args54, &_result55); err != nil {
+    return
+  }
+  switch {
+  case _result55.Ire!= nil:
+    return _result55.Ire
+  case _result55.Ue!= nil:
+    return _result55.Ue
+  case _result55.Te!= nil:
+    return _result55.Te
+  }
 
-func (p *CassandraClient) sendInsert(key []byte, column_parent *ColumnParent, column *Column, consistency_level ConsistencyLevel)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("insert", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraInsertArgs{
-  Key : key,
-  ColumnParent : column_parent,
-  Column : column,
-  ConsistencyLevel : consistency_level,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvInsert() (err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "insert" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "insert failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "insert failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error54 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error55 error
-    error55, err = error54.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error55
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "insert failed: invalid message type")
-    return
-  }
-  result := CassandraInsertResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  }
-  return
+  return nil
 }
 
 // Increment or decrement a counter.
@@ -10698,89 +9986,25 @@ func (p *CassandraClient) recvInsert() (err error) {
 //  - Column
 //  - ConsistencyLevel
 func (p *CassandraClient) Add(ctx context.Context, key []byte, column_parent *ColumnParent, column *CounterColumn, consistency_level ConsistencyLevel) (err error) {
-  if err = p.sendAdd(key, column_parent, column, consistency_level); err != nil { return }
-  return p.recvAdd()
-}
+  var _args56 CassandraAddArgs
+  _args56.Key = key
+  _args56.ColumnParent = column_parent
+  _args56.Column = column
+  _args56.ConsistencyLevel = consistency_level
+  var _result57 CassandraAddResult
+  if err = p.c.Call(ctx, "add", &_args56, &_result57); err != nil {
+    return
+  }
+  switch {
+  case _result57.Ire!= nil:
+    return _result57.Ire
+  case _result57.Ue!= nil:
+    return _result57.Ue
+  case _result57.Te!= nil:
+    return _result57.Te
+  }
 
-func (p *CassandraClient) sendAdd(key []byte, column_parent *ColumnParent, column *CounterColumn, consistency_level ConsistencyLevel)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("add", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraAddArgs{
-  Key : key,
-  ColumnParent : column_parent,
-  Column : column,
-  ConsistencyLevel : consistency_level,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvAdd() (err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "add" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "add failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "add failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error56 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error57 error
-    error57, err = error56.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error57
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "add failed: invalid message type")
-    return
-  }
-  result := CassandraAddResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  }
-  return
+  return nil
 }
 
 // Atomic compare and set.
@@ -10806,92 +10030,27 @@ func (p *CassandraClient) recvAdd() (err error) {
 //  - SerialConsistencyLevel
 //  - CommitConsistencyLevel
 func (p *CassandraClient) Cas(ctx context.Context, key []byte, column_family string, expected []*Column, updates []*Column, serial_consistency_level ConsistencyLevel, commit_consistency_level ConsistencyLevel) (r *CASResult_, err error) {
-  if err = p.sendCas(key, column_family, expected, updates, serial_consistency_level, commit_consistency_level); err != nil { return }
-  return p.recvCas()
-}
+  var _args58 CassandraCasArgs
+  _args58.Key = key
+  _args58.ColumnFamily = column_family
+  _args58.Expected = expected
+  _args58.Updates = updates
+  _args58.SerialConsistencyLevel = serial_consistency_level
+  _args58.CommitConsistencyLevel = commit_consistency_level
+  var _result59 CassandraCasResult
+  if err = p.c.Call(ctx, "cas", &_args58, &_result59); err != nil {
+    return
+  }
+  switch {
+  case _result59.Ire!= nil:
+    return r, _result59.Ire
+  case _result59.Ue!= nil:
+    return r, _result59.Ue
+  case _result59.Te!= nil:
+    return r, _result59.Te
+  }
 
-func (p *CassandraClient) sendCas(key []byte, column_family string, expected []*Column, updates []*Column, serial_consistency_level ConsistencyLevel, commit_consistency_level ConsistencyLevel)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("cas", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraCasArgs{
-  Key : key,
-  ColumnFamily : column_family,
-  Expected : expected,
-  Updates : updates,
-  SerialConsistencyLevel : serial_consistency_level,
-  CommitConsistencyLevel : commit_consistency_level,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvCas() (value *CASResult_, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "cas" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "cas failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "cas failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error58 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error59 error
-    error59, err = error58.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error59
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "cas failed: invalid message type")
-    return
-  }
-  result := CassandraCasResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result59.GetSuccess(), nil
 }
 
 // Remove data from the row specified by key at the granularity specified by column_path, and the given timestamp. Note
@@ -10904,89 +10063,25 @@ func (p *CassandraClient) recvCas() (value *CASResult_, err error) {
 //  - Timestamp
 //  - ConsistencyLevel
 func (p *CassandraClient) Remove(ctx context.Context, key []byte, column_path *ColumnPath, timestamp int64, consistency_level ConsistencyLevel) (err error) {
-  if err = p.sendRemove(key, column_path, timestamp, consistency_level); err != nil { return }
-  return p.recvRemove()
-}
+  var _args60 CassandraRemoveArgs
+  _args60.Key = key
+  _args60.ColumnPath = column_path
+  _args60.Timestamp = timestamp
+  _args60.ConsistencyLevel = consistency_level
+  var _result61 CassandraRemoveResult
+  if err = p.c.Call(ctx, "remove", &_args60, &_result61); err != nil {
+    return
+  }
+  switch {
+  case _result61.Ire!= nil:
+    return _result61.Ire
+  case _result61.Ue!= nil:
+    return _result61.Ue
+  case _result61.Te!= nil:
+    return _result61.Te
+  }
 
-func (p *CassandraClient) sendRemove(key []byte, column_path *ColumnPath, timestamp int64, consistency_level ConsistencyLevel)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("remove", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraRemoveArgs{
-  Key : key,
-  ColumnPath : column_path,
-  Timestamp : timestamp,
-  ConsistencyLevel : consistency_level,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvRemove() (err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "remove" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "remove failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "remove failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error60 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error61 error
-    error61, err = error60.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error61
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "remove failed: invalid message type")
-    return
-  }
-  result := CassandraRemoveResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  }
-  return
+  return nil
 }
 
 // Remove a counter at the specified location.
@@ -10998,88 +10093,24 @@ func (p *CassandraClient) recvRemove() (err error) {
 //  - Path
 //  - ConsistencyLevel
 func (p *CassandraClient) RemoveCounter(ctx context.Context, key []byte, path *ColumnPath, consistency_level ConsistencyLevel) (err error) {
-  if err = p.sendRemoveCounter(key, path, consistency_level); err != nil { return }
-  return p.recvRemoveCounter()
-}
+  var _args62 CassandraRemoveCounterArgs
+  _args62.Key = key
+  _args62.Path = path
+  _args62.ConsistencyLevel = consistency_level
+  var _result63 CassandraRemoveCounterResult
+  if err = p.c.Call(ctx, "remove_counter", &_args62, &_result63); err != nil {
+    return
+  }
+  switch {
+  case _result63.Ire!= nil:
+    return _result63.Ire
+  case _result63.Ue!= nil:
+    return _result63.Ue
+  case _result63.Te!= nil:
+    return _result63.Te
+  }
 
-func (p *CassandraClient) sendRemoveCounter(key []byte, path *ColumnPath, consistency_level ConsistencyLevel)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("remove_counter", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraRemoveCounterArgs{
-  Key : key,
-  Path : path,
-  ConsistencyLevel : consistency_level,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvRemoveCounter() (err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "remove_counter" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "remove_counter failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "remove_counter failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error62 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error63 error
-    error63, err = error62.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error63
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "remove_counter failed: invalid message type")
-    return
-  }
-  result := CassandraRemoveCounterResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  }
-  return
+  return nil
 }
 
 //   Mutate many columns or super columns for many row keys. See also: Mutation.
@@ -11091,87 +10122,23 @@ func (p *CassandraClient) recvRemoveCounter() (err error) {
 //  - MutationMap
 //  - ConsistencyLevel
 func (p *CassandraClient) BatchMutate(ctx context.Context, mutation_map map[string]map[string][]*Mutation, consistency_level ConsistencyLevel) (err error) {
-  if err = p.sendBatchMutate(mutation_map, consistency_level); err != nil { return }
-  return p.recvBatchMutate()
-}
+  var _args64 CassandraBatchMutateArgs
+  _args64.MutationMap = mutation_map
+  _args64.ConsistencyLevel = consistency_level
+  var _result65 CassandraBatchMutateResult
+  if err = p.c.Call(ctx, "batch_mutate", &_args64, &_result65); err != nil {
+    return
+  }
+  switch {
+  case _result65.Ire!= nil:
+    return _result65.Ire
+  case _result65.Ue!= nil:
+    return _result65.Ue
+  case _result65.Te!= nil:
+    return _result65.Te
+  }
 
-func (p *CassandraClient) sendBatchMutate(mutation_map map[string]map[string][]*Mutation, consistency_level ConsistencyLevel)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("batch_mutate", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraBatchMutateArgs{
-  MutationMap : mutation_map,
-  ConsistencyLevel : consistency_level,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvBatchMutate() (err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "batch_mutate" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "batch_mutate failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "batch_mutate failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error64 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error65 error
-    error65, err = error64.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error65
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "batch_mutate failed: invalid message type")
-    return
-  }
-  result := CassandraBatchMutateResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  }
-  return
+  return nil
 }
 
 //   Atomically mutate many columns or super columns for many row keys. See also: Mutation.
@@ -11183,87 +10150,23 @@ func (p *CassandraClient) recvBatchMutate() (err error) {
 //  - MutationMap
 //  - ConsistencyLevel
 func (p *CassandraClient) AtomicBatchMutate(ctx context.Context, mutation_map map[string]map[string][]*Mutation, consistency_level ConsistencyLevel) (err error) {
-  if err = p.sendAtomicBatchMutate(mutation_map, consistency_level); err != nil { return }
-  return p.recvAtomicBatchMutate()
-}
+  var _args66 CassandraAtomicBatchMutateArgs
+  _args66.MutationMap = mutation_map
+  _args66.ConsistencyLevel = consistency_level
+  var _result67 CassandraAtomicBatchMutateResult
+  if err = p.c.Call(ctx, "atomic_batch_mutate", &_args66, &_result67); err != nil {
+    return
+  }
+  switch {
+  case _result67.Ire!= nil:
+    return _result67.Ire
+  case _result67.Ue!= nil:
+    return _result67.Ue
+  case _result67.Te!= nil:
+    return _result67.Te
+  }
 
-func (p *CassandraClient) sendAtomicBatchMutate(mutation_map map[string]map[string][]*Mutation, consistency_level ConsistencyLevel)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("atomic_batch_mutate", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraAtomicBatchMutateArgs{
-  MutationMap : mutation_map,
-  ConsistencyLevel : consistency_level,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvAtomicBatchMutate() (err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "atomic_batch_mutate" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "atomic_batch_mutate failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "atomic_batch_mutate failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error66 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error67 error
-    error67, err = error66.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error67
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "atomic_batch_mutate failed: invalid message type")
-    return
-  }
-  result := CassandraAtomicBatchMutateResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  }
-  return
+  return nil
 }
 
 // Truncate will mark and entire column family as deleted.
@@ -11276,86 +10179,22 @@ func (p *CassandraClient) recvAtomicBatchMutate() (err error) {
 // Parameters:
 //  - Cfname
 func (p *CassandraClient) Truncate(ctx context.Context, cfname string) (err error) {
-  if err = p.sendTruncate(cfname); err != nil { return }
-  return p.recvTruncate()
-}
+  var _args68 CassandraTruncateArgs
+  _args68.Cfname = cfname
+  var _result69 CassandraTruncateResult
+  if err = p.c.Call(ctx, "truncate", &_args68, &_result69); err != nil {
+    return
+  }
+  switch {
+  case _result69.Ire!= nil:
+    return _result69.Ire
+  case _result69.Ue!= nil:
+    return _result69.Ue
+  case _result69.Te!= nil:
+    return _result69.Te
+  }
 
-func (p *CassandraClient) sendTruncate(cfname string)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("truncate", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraTruncateArgs{
-  Cfname : cfname,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvTruncate() (err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "truncate" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "truncate failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "truncate failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error68 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error69 error
-    error69, err = error68.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error69
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "truncate failed: invalid message type")
-    return
-  }
-  result := CassandraTruncateResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  }
-  return
+  return nil
 }
 
 // Select multiple slices of a key in a single RPC operation
@@ -11363,393 +10202,74 @@ func (p *CassandraClient) recvTruncate() (err error) {
 // Parameters:
 //  - Request
 func (p *CassandraClient) GetMultiSlice(ctx context.Context, request *MultiSliceRequest) (r []*ColumnOrSuperColumn, err error) {
-  if err = p.sendGetMultiSlice(request); err != nil { return }
-  return p.recvGetMultiSlice()
-}
+  var _args70 CassandraGetMultiSliceArgs
+  _args70.Request = request
+  var _result71 CassandraGetMultiSliceResult
+  if err = p.c.Call(ctx, "get_multi_slice", &_args70, &_result71); err != nil {
+    return
+  }
+  switch {
+  case _result71.Ire!= nil:
+    return r, _result71.Ire
+  case _result71.Ue!= nil:
+    return r, _result71.Ue
+  case _result71.Te!= nil:
+    return r, _result71.Te
+  }
 
-func (p *CassandraClient) sendGetMultiSlice(request *MultiSliceRequest)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("get_multi_slice", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraGetMultiSliceArgs{
-  Request : request,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvGetMultiSlice() (value []*ColumnOrSuperColumn, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "get_multi_slice" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "get_multi_slice failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "get_multi_slice failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error70 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error71 error
-    error71, err = error70.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error71
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "get_multi_slice failed: invalid message type")
-    return
-  }
-  result := CassandraGetMultiSliceResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result71.GetSuccess(), nil
 }
 
 // for each schema version present in the cluster, returns a list of nodes at that version.
 // hosts that do not respond will be under the key DatabaseDescriptor.INITIAL_VERSION.
 // the cluster is all on the same version if the size of the map is 1.
-func (p *CassandraClient) DescribeSchemaVersions(ctx context.Context, ) (r map[string][]string, err error) {
-  if err = p.sendDescribeSchemaVersions(); err != nil { return }
-  return p.recvDescribeSchemaVersions()
-}
+func (p *CassandraClient) DescribeSchemaVersions(ctx context.Context) (r map[string][]string, err error) {
+  var _args72 CassandraDescribeSchemaVersionsArgs
+  var _result73 CassandraDescribeSchemaVersionsResult
+  if err = p.c.Call(ctx, "describe_schema_versions", &_args72, &_result73); err != nil {
+    return
+  }
+  switch {
+  case _result73.Ire!= nil:
+    return r, _result73.Ire
+  }
 
-func (p *CassandraClient) sendDescribeSchemaVersions()(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("describe_schema_versions", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraDescribeSchemaVersionsArgs{
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvDescribeSchemaVersions() (value map[string][]string, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "describe_schema_versions" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "describe_schema_versions failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "describe_schema_versions failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error72 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error73 error
-    error73, err = error72.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error73
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "describe_schema_versions failed: invalid message type")
-    return
-  }
-  result := CassandraDescribeSchemaVersionsResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result73.GetSuccess(), nil
 }
 
 // list the defined keyspaces in this cluster
-func (p *CassandraClient) DescribeKeyspaces(ctx context.Context, ) (r []*KsDef, err error) {
-  if err = p.sendDescribeKeyspaces(); err != nil { return }
-  return p.recvDescribeKeyspaces()
-}
+func (p *CassandraClient) DescribeKeyspaces(ctx context.Context) (r []*KsDef, err error) {
+  var _args74 CassandraDescribeKeyspacesArgs
+  var _result75 CassandraDescribeKeyspacesResult
+  if err = p.c.Call(ctx, "describe_keyspaces", &_args74, &_result75); err != nil {
+    return
+  }
+  switch {
+  case _result75.Ire!= nil:
+    return r, _result75.Ire
+  }
 
-func (p *CassandraClient) sendDescribeKeyspaces()(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("describe_keyspaces", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraDescribeKeyspacesArgs{
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvDescribeKeyspaces() (value []*KsDef, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "describe_keyspaces" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "describe_keyspaces failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "describe_keyspaces failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error74 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error75 error
-    error75, err = error74.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error75
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "describe_keyspaces failed: invalid message type")
-    return
-  }
-  result := CassandraDescribeKeyspacesResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result75.GetSuccess(), nil
 }
 
 // get the cluster name
-func (p *CassandraClient) DescribeClusterName(ctx context.Context, ) (r string, err error) {
-  if err = p.sendDescribeClusterName(); err != nil { return }
-  return p.recvDescribeClusterName()
-}
-
-func (p *CassandraClient) sendDescribeClusterName()(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("describe_cluster_name", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraDescribeClusterNameArgs{
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvDescribeClusterName() (value string, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
+func (p *CassandraClient) DescribeClusterName(ctx context.Context) (r string, err error) {
+  var _args76 CassandraDescribeClusterNameArgs
+  var _result77 CassandraDescribeClusterNameResult
+  if err = p.c.Call(ctx, "describe_cluster_name", &_args76, &_result77); err != nil {
     return
   }
-  if method != "describe_cluster_name" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "describe_cluster_name failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "describe_cluster_name failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error76 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error77 error
-    error77, err = error76.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error77
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "describe_cluster_name failed: invalid message type")
-    return
-  }
-  result := CassandraDescribeClusterNameResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  value = result.GetSuccess()
-  return
+  return _result77.GetSuccess(), nil
 }
 
 // get the thrift api version
-func (p *CassandraClient) DescribeVersion(ctx context.Context, ) (r string, err error) {
-  if err = p.sendDescribeVersion(); err != nil { return }
-  return p.recvDescribeVersion()
-}
-
-func (p *CassandraClient) sendDescribeVersion()(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("describe_version", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraDescribeVersionArgs{
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvDescribeVersion() (value string, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
+func (p *CassandraClient) DescribeVersion(ctx context.Context) (r string, err error) {
+  var _args78 CassandraDescribeVersionArgs
+  var _result79 CassandraDescribeVersionResult
+  if err = p.c.Call(ctx, "describe_version", &_args78, &_result79); err != nil {
     return
   }
-  if method != "describe_version" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "describe_version failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "describe_version failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error78 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error79 error
-    error79, err = error78.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error79
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "describe_version failed: invalid message type")
-    return
-  }
-  result := CassandraDescribeVersionResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  value = result.GetSuccess()
-  return
+  return _result79.GetSuccess(), nil
 }
 
 // get the token ring: a map of ranges to host addresses,
@@ -11764,81 +10284,18 @@ func (p *CassandraClient) recvDescribeVersion() (value string, err error) {
 // Parameters:
 //  - Keyspace
 func (p *CassandraClient) DescribeRing(ctx context.Context, keyspace string) (r []*TokenRange, err error) {
-  if err = p.sendDescribeRing(keyspace); err != nil { return }
-  return p.recvDescribeRing()
-}
+  var _args80 CassandraDescribeRingArgs
+  _args80.Keyspace = keyspace
+  var _result81 CassandraDescribeRingResult
+  if err = p.c.Call(ctx, "describe_ring", &_args80, &_result81); err != nil {
+    return
+  }
+  switch {
+  case _result81.Ire!= nil:
+    return r, _result81.Ire
+  }
 
-func (p *CassandraClient) sendDescribeRing(keyspace string)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("describe_ring", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraDescribeRingArgs{
-  Keyspace : keyspace,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvDescribeRing() (value []*TokenRange, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "describe_ring" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "describe_ring failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "describe_ring failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error80 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error81 error
-    error81, err = error80.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error81
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "describe_ring failed: invalid message type")
-    return
-  }
-  result := CassandraDescribeRingResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result81.GetSuccess(), nil
 }
 
 // same as describe_ring, but considers only nodes in the local DC
@@ -11846,309 +10303,55 @@ func (p *CassandraClient) recvDescribeRing() (value []*TokenRange, err error) {
 // Parameters:
 //  - Keyspace
 func (p *CassandraClient) DescribeLocalRing(ctx context.Context, keyspace string) (r []*TokenRange, err error) {
-  if err = p.sendDescribeLocalRing(keyspace); err != nil { return }
-  return p.recvDescribeLocalRing()
-}
+  var _args82 CassandraDescribeLocalRingArgs
+  _args82.Keyspace = keyspace
+  var _result83 CassandraDescribeLocalRingResult
+  if err = p.c.Call(ctx, "describe_local_ring", &_args82, &_result83); err != nil {
+    return
+  }
+  switch {
+  case _result83.Ire!= nil:
+    return r, _result83.Ire
+  }
 
-func (p *CassandraClient) sendDescribeLocalRing(keyspace string)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("describe_local_ring", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraDescribeLocalRingArgs{
-  Keyspace : keyspace,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvDescribeLocalRing() (value []*TokenRange, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "describe_local_ring" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "describe_local_ring failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "describe_local_ring failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error82 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error83 error
-    error83, err = error82.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error83
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "describe_local_ring failed: invalid message type")
-    return
-  }
-  result := CassandraDescribeLocalRingResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result83.GetSuccess(), nil
 }
 
 // get the mapping between token->node ip
 // without taking replication into consideration
 // https://issues.apache.org/jira/browse/CASSANDRA-4092
-func (p *CassandraClient) DescribeTokenMap(ctx context.Context, ) (r map[string]string, err error) {
-  if err = p.sendDescribeTokenMap(); err != nil { return }
-  return p.recvDescribeTokenMap()
-}
+func (p *CassandraClient) DescribeTokenMap(ctx context.Context) (r map[string]string, err error) {
+  var _args84 CassandraDescribeTokenMapArgs
+  var _result85 CassandraDescribeTokenMapResult
+  if err = p.c.Call(ctx, "describe_token_map", &_args84, &_result85); err != nil {
+    return
+  }
+  switch {
+  case _result85.Ire!= nil:
+    return r, _result85.Ire
+  }
 
-func (p *CassandraClient) sendDescribeTokenMap()(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("describe_token_map", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraDescribeTokenMapArgs{
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvDescribeTokenMap() (value map[string]string, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "describe_token_map" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "describe_token_map failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "describe_token_map failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error84 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error85 error
-    error85, err = error84.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error85
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "describe_token_map failed: invalid message type")
-    return
-  }
-  result := CassandraDescribeTokenMapResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result85.GetSuccess(), nil
 }
 
 // returns the partitioner used by this cluster
-func (p *CassandraClient) DescribePartitioner(ctx context.Context, ) (r string, err error) {
-  if err = p.sendDescribePartitioner(); err != nil { return }
-  return p.recvDescribePartitioner()
-}
-
-func (p *CassandraClient) sendDescribePartitioner()(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("describe_partitioner", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraDescribePartitionerArgs{
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvDescribePartitioner() (value string, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
+func (p *CassandraClient) DescribePartitioner(ctx context.Context) (r string, err error) {
+  var _args86 CassandraDescribePartitionerArgs
+  var _result87 CassandraDescribePartitionerResult
+  if err = p.c.Call(ctx, "describe_partitioner", &_args86, &_result87); err != nil {
     return
   }
-  if method != "describe_partitioner" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "describe_partitioner failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "describe_partitioner failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error86 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error87 error
-    error87, err = error86.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error87
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "describe_partitioner failed: invalid message type")
-    return
-  }
-  result := CassandraDescribePartitionerResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  value = result.GetSuccess()
-  return
+  return _result87.GetSuccess(), nil
 }
 
 // returns the snitch used by this cluster
-func (p *CassandraClient) DescribeSnitch(ctx context.Context, ) (r string, err error) {
-  if err = p.sendDescribeSnitch(); err != nil { return }
-  return p.recvDescribeSnitch()
-}
-
-func (p *CassandraClient) sendDescribeSnitch()(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("describe_snitch", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraDescribeSnitchArgs{
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvDescribeSnitch() (value string, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
+func (p *CassandraClient) DescribeSnitch(ctx context.Context) (r string, err error) {
+  var _args88 CassandraDescribeSnitchArgs
+  var _result89 CassandraDescribeSnitchResult
+  if err = p.c.Call(ctx, "describe_snitch", &_args88, &_result89); err != nil {
     return
   }
-  if method != "describe_snitch" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "describe_snitch failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "describe_snitch failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error88 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error89 error
-    error89, err = error88.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error89
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "describe_snitch failed: invalid message type")
-    return
-  }
-  result := CassandraDescribeSnitchResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  value = result.GetSuccess()
-  return
+  return _result89.GetSuccess(), nil
 }
 
 // describe specified keyspace
@@ -12156,84 +10359,20 @@ func (p *CassandraClient) recvDescribeSnitch() (value string, err error) {
 // Parameters:
 //  - Keyspace
 func (p *CassandraClient) DescribeKeyspace(ctx context.Context, keyspace string) (r *KsDef, err error) {
-  if err = p.sendDescribeKeyspace(keyspace); err != nil { return }
-  return p.recvDescribeKeyspace()
-}
+  var _args90 CassandraDescribeKeyspaceArgs
+  _args90.Keyspace = keyspace
+  var _result91 CassandraDescribeKeyspaceResult
+  if err = p.c.Call(ctx, "describe_keyspace", &_args90, &_result91); err != nil {
+    return
+  }
+  switch {
+  case _result91.Nfe!= nil:
+    return r, _result91.Nfe
+  case _result91.Ire!= nil:
+    return r, _result91.Ire
+  }
 
-func (p *CassandraClient) sendDescribeKeyspace(keyspace string)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("describe_keyspace", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraDescribeKeyspaceArgs{
-  Keyspace : keyspace,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvDescribeKeyspace() (value *KsDef, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "describe_keyspace" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "describe_keyspace failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "describe_keyspace failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error90 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error91 error
-    error91, err = error90.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error91
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "describe_keyspace failed: invalid message type")
-    return
-  }
-  result := CassandraDescribeKeyspaceResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Nfe != nil {
-    err = result.Nfe
-    return 
-  } else   if result.Ire != nil {
-    err = result.Ire
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result91.GetSuccess(), nil
 }
 
 // experimental API for hadoop/parallel query support.
@@ -12248,159 +10387,32 @@ func (p *CassandraClient) recvDescribeKeyspace() (value *KsDef, err error) {
 //  - EndToken
 //  - KeysPerSplit
 func (p *CassandraClient) DescribeSplits(ctx context.Context, cfName string, start_token string, end_token string, keys_per_split int32) (r []string, err error) {
-  if err = p.sendDescribeSplits(cfName, start_token, end_token, keys_per_split); err != nil { return }
-  return p.recvDescribeSplits()
-}
+  var _args92 CassandraDescribeSplitsArgs
+  _args92.CfName = cfName
+  _args92.StartToken = start_token
+  _args92.EndToken = end_token
+  _args92.KeysPerSplit = keys_per_split
+  var _result93 CassandraDescribeSplitsResult
+  if err = p.c.Call(ctx, "describe_splits", &_args92, &_result93); err != nil {
+    return
+  }
+  switch {
+  case _result93.Ire!= nil:
+    return r, _result93.Ire
+  }
 
-func (p *CassandraClient) sendDescribeSplits(cfName string, start_token string, end_token string, keys_per_split int32)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("describe_splits", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraDescribeSplitsArgs{
-  CfName : cfName,
-  StartToken : start_token,
-  EndToken : end_token,
-  KeysPerSplit : keys_per_split,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvDescribeSplits() (value []string, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "describe_splits" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "describe_splits failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "describe_splits failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error92 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error93 error
-    error93, err = error92.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error93
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "describe_splits failed: invalid message type")
-    return
-  }
-  result := CassandraDescribeSplitsResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result93.GetSuccess(), nil
 }
 
 // Enables tracing for the next query in this connection and returns the UUID for that trace session
 // The next query will be traced idependently of trace probability and the returned UUID can be used to query the trace keyspace
-func (p *CassandraClient) TraceNextQuery(ctx context.Context, ) (r []byte, err error) {
-  if err = p.sendTraceNextQuery(); err != nil { return }
-  return p.recvTraceNextQuery()
-}
-
-func (p *CassandraClient) sendTraceNextQuery()(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("trace_next_query", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraTraceNextQueryArgs{
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvTraceNextQuery() (value []byte, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
+func (p *CassandraClient) TraceNextQuery(ctx context.Context) (r []byte, err error) {
+  var _args94 CassandraTraceNextQueryArgs
+  var _result95 CassandraTraceNextQueryResult
+  if err = p.c.Call(ctx, "trace_next_query", &_args94, &_result95); err != nil {
     return
   }
-  if method != "trace_next_query" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "trace_next_query failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "trace_next_query failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error94 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error95 error
-    error95, err = error94.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error95
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "trace_next_query failed: invalid message type")
-    return
-  }
-  result := CassandraTraceNextQueryResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  value = result.GetSuccess()
-  return
+  return _result95.GetSuccess(), nil
 }
 
 // Parameters:
@@ -12409,84 +10421,21 @@ func (p *CassandraClient) recvTraceNextQuery() (value []byte, err error) {
 //  - EndToken
 //  - KeysPerSplit
 func (p *CassandraClient) DescribeSplitsEx(ctx context.Context, cfName string, start_token string, end_token string, keys_per_split int32) (r []*CfSplit, err error) {
-  if err = p.sendDescribeSplitsEx(cfName, start_token, end_token, keys_per_split); err != nil { return }
-  return p.recvDescribeSplitsEx()
-}
+  var _args96 CassandraDescribeSplitsExArgs
+  _args96.CfName = cfName
+  _args96.StartToken = start_token
+  _args96.EndToken = end_token
+  _args96.KeysPerSplit = keys_per_split
+  var _result97 CassandraDescribeSplitsExResult
+  if err = p.c.Call(ctx, "describe_splits_ex", &_args96, &_result97); err != nil {
+    return
+  }
+  switch {
+  case _result97.Ire!= nil:
+    return r, _result97.Ire
+  }
 
-func (p *CassandraClient) sendDescribeSplitsEx(cfName string, start_token string, end_token string, keys_per_split int32)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("describe_splits_ex", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraDescribeSplitsExArgs{
-  CfName : cfName,
-  StartToken : start_token,
-  EndToken : end_token,
-  KeysPerSplit : keys_per_split,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvDescribeSplitsEx() (value []*CfSplit, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "describe_splits_ex" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "describe_splits_ex failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "describe_splits_ex failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error96 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error97 error
-    error97, err = error96.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error97
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "describe_splits_ex failed: invalid message type")
-    return
-  }
-  result := CassandraDescribeSplitsExResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result97.GetSuccess(), nil
 }
 
 // adds a column family. returns the new schema id.
@@ -12494,84 +10443,20 @@ func (p *CassandraClient) recvDescribeSplitsEx() (value []*CfSplit, err error) {
 // Parameters:
 //  - CfDef
 func (p *CassandraClient) SystemAddColumnFamily(ctx context.Context, cf_def *CfDef) (r string, err error) {
-  if err = p.sendSystemAddColumnFamily(cf_def); err != nil { return }
-  return p.recvSystemAddColumnFamily()
-}
+  var _args98 CassandraSystemAddColumnFamilyArgs
+  _args98.CfDef = cf_def
+  var _result99 CassandraSystemAddColumnFamilyResult
+  if err = p.c.Call(ctx, "system_add_column_family", &_args98, &_result99); err != nil {
+    return
+  }
+  switch {
+  case _result99.Ire!= nil:
+    return r, _result99.Ire
+  case _result99.Sde!= nil:
+    return r, _result99.Sde
+  }
 
-func (p *CassandraClient) sendSystemAddColumnFamily(cf_def *CfDef)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("system_add_column_family", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraSystemAddColumnFamilyArgs{
-  CfDef : cf_def,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvSystemAddColumnFamily() (value string, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "system_add_column_family" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "system_add_column_family failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "system_add_column_family failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error98 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error99 error
-    error99, err = error98.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error99
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "system_add_column_family failed: invalid message type")
-    return
-  }
-  result := CassandraSystemAddColumnFamilyResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Sde != nil {
-    err = result.Sde
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result99.GetSuccess(), nil
 }
 
 // drops a column family. returns the new schema id.
@@ -12579,84 +10464,20 @@ func (p *CassandraClient) recvSystemAddColumnFamily() (value string, err error) 
 // Parameters:
 //  - ColumnFamily
 func (p *CassandraClient) SystemDropColumnFamily(ctx context.Context, column_family string) (r string, err error) {
-  if err = p.sendSystemDropColumnFamily(column_family); err != nil { return }
-  return p.recvSystemDropColumnFamily()
-}
+  var _args100 CassandraSystemDropColumnFamilyArgs
+  _args100.ColumnFamily = column_family
+  var _result101 CassandraSystemDropColumnFamilyResult
+  if err = p.c.Call(ctx, "system_drop_column_family", &_args100, &_result101); err != nil {
+    return
+  }
+  switch {
+  case _result101.Ire!= nil:
+    return r, _result101.Ire
+  case _result101.Sde!= nil:
+    return r, _result101.Sde
+  }
 
-func (p *CassandraClient) sendSystemDropColumnFamily(column_family string)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("system_drop_column_family", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraSystemDropColumnFamilyArgs{
-  ColumnFamily : column_family,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvSystemDropColumnFamily() (value string, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "system_drop_column_family" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "system_drop_column_family failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "system_drop_column_family failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error100 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error101 error
-    error101, err = error100.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error101
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "system_drop_column_family failed: invalid message type")
-    return
-  }
-  result := CassandraSystemDropColumnFamilyResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Sde != nil {
-    err = result.Sde
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result101.GetSuccess(), nil
 }
 
 // adds a keyspace and any column families that are part of it. returns the new schema id.
@@ -12664,84 +10485,20 @@ func (p *CassandraClient) recvSystemDropColumnFamily() (value string, err error)
 // Parameters:
 //  - KsDef
 func (p *CassandraClient) SystemAddKeyspace(ctx context.Context, ks_def *KsDef) (r string, err error) {
-  if err = p.sendSystemAddKeyspace(ks_def); err != nil { return }
-  return p.recvSystemAddKeyspace()
-}
+  var _args102 CassandraSystemAddKeyspaceArgs
+  _args102.KsDef = ks_def
+  var _result103 CassandraSystemAddKeyspaceResult
+  if err = p.c.Call(ctx, "system_add_keyspace", &_args102, &_result103); err != nil {
+    return
+  }
+  switch {
+  case _result103.Ire!= nil:
+    return r, _result103.Ire
+  case _result103.Sde!= nil:
+    return r, _result103.Sde
+  }
 
-func (p *CassandraClient) sendSystemAddKeyspace(ks_def *KsDef)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("system_add_keyspace", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraSystemAddKeyspaceArgs{
-  KsDef : ks_def,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvSystemAddKeyspace() (value string, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "system_add_keyspace" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "system_add_keyspace failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "system_add_keyspace failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error102 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error103 error
-    error103, err = error102.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error103
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "system_add_keyspace failed: invalid message type")
-    return
-  }
-  result := CassandraSystemAddKeyspaceResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Sde != nil {
-    err = result.Sde
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result103.GetSuccess(), nil
 }
 
 // drops a keyspace and any column families that are part of it. returns the new schema id.
@@ -12749,84 +10506,20 @@ func (p *CassandraClient) recvSystemAddKeyspace() (value string, err error) {
 // Parameters:
 //  - Keyspace
 func (p *CassandraClient) SystemDropKeyspace(ctx context.Context, keyspace string) (r string, err error) {
-  if err = p.sendSystemDropKeyspace(keyspace); err != nil { return }
-  return p.recvSystemDropKeyspace()
-}
+  var _args104 CassandraSystemDropKeyspaceArgs
+  _args104.Keyspace = keyspace
+  var _result105 CassandraSystemDropKeyspaceResult
+  if err = p.c.Call(ctx, "system_drop_keyspace", &_args104, &_result105); err != nil {
+    return
+  }
+  switch {
+  case _result105.Ire!= nil:
+    return r, _result105.Ire
+  case _result105.Sde!= nil:
+    return r, _result105.Sde
+  }
 
-func (p *CassandraClient) sendSystemDropKeyspace(keyspace string)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("system_drop_keyspace", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraSystemDropKeyspaceArgs{
-  Keyspace : keyspace,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvSystemDropKeyspace() (value string, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "system_drop_keyspace" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "system_drop_keyspace failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "system_drop_keyspace failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error104 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error105 error
-    error105, err = error104.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error105
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "system_drop_keyspace failed: invalid message type")
-    return
-  }
-  result := CassandraSystemDropKeyspaceResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Sde != nil {
-    err = result.Sde
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result105.GetSuccess(), nil
 }
 
 // updates properties of a keyspace. returns the new schema id.
@@ -12834,84 +10527,20 @@ func (p *CassandraClient) recvSystemDropKeyspace() (value string, err error) {
 // Parameters:
 //  - KsDef
 func (p *CassandraClient) SystemUpdateKeyspace(ctx context.Context, ks_def *KsDef) (r string, err error) {
-  if err = p.sendSystemUpdateKeyspace(ks_def); err != nil { return }
-  return p.recvSystemUpdateKeyspace()
-}
+  var _args106 CassandraSystemUpdateKeyspaceArgs
+  _args106.KsDef = ks_def
+  var _result107 CassandraSystemUpdateKeyspaceResult
+  if err = p.c.Call(ctx, "system_update_keyspace", &_args106, &_result107); err != nil {
+    return
+  }
+  switch {
+  case _result107.Ire!= nil:
+    return r, _result107.Ire
+  case _result107.Sde!= nil:
+    return r, _result107.Sde
+  }
 
-func (p *CassandraClient) sendSystemUpdateKeyspace(ks_def *KsDef)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("system_update_keyspace", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraSystemUpdateKeyspaceArgs{
-  KsDef : ks_def,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvSystemUpdateKeyspace() (value string, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "system_update_keyspace" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "system_update_keyspace failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "system_update_keyspace failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error106 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error107 error
-    error107, err = error106.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error107
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "system_update_keyspace failed: invalid message type")
-    return
-  }
-  result := CassandraSystemUpdateKeyspaceResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Sde != nil {
-    err = result.Sde
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result107.GetSuccess(), nil
 }
 
 // updates properties of a column family. returns the new schema id.
@@ -12919,84 +10548,20 @@ func (p *CassandraClient) recvSystemUpdateKeyspace() (value string, err error) {
 // Parameters:
 //  - CfDef
 func (p *CassandraClient) SystemUpdateColumnFamily(ctx context.Context, cf_def *CfDef) (r string, err error) {
-  if err = p.sendSystemUpdateColumnFamily(cf_def); err != nil { return }
-  return p.recvSystemUpdateColumnFamily()
-}
+  var _args108 CassandraSystemUpdateColumnFamilyArgs
+  _args108.CfDef = cf_def
+  var _result109 CassandraSystemUpdateColumnFamilyResult
+  if err = p.c.Call(ctx, "system_update_column_family", &_args108, &_result109); err != nil {
+    return
+  }
+  switch {
+  case _result109.Ire!= nil:
+    return r, _result109.Ire
+  case _result109.Sde!= nil:
+    return r, _result109.Sde
+  }
 
-func (p *CassandraClient) sendSystemUpdateColumnFamily(cf_def *CfDef)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("system_update_column_family", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraSystemUpdateColumnFamilyArgs{
-  CfDef : cf_def,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvSystemUpdateColumnFamily() (value string, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "system_update_column_family" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "system_update_column_family failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "system_update_column_family failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error108 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error109 error
-    error109, err = error108.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error109
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "system_update_column_family failed: invalid message type")
-    return
-  }
-  result := CassandraSystemUpdateColumnFamilyResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Sde != nil {
-    err = result.Sde
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result109.GetSuccess(), nil
 }
 
 // @deprecated Throws InvalidRequestException since 2.2. Please use the CQL3 version instead.
@@ -13005,91 +10570,25 @@ func (p *CassandraClient) recvSystemUpdateColumnFamily() (value string, err erro
 //  - Query
 //  - Compression
 func (p *CassandraClient) ExecuteCqlQuery(ctx context.Context, query []byte, compression Compression) (r *CqlResult_, err error) {
-  if err = p.sendExecuteCqlQuery(query, compression); err != nil { return }
-  return p.recvExecuteCqlQuery()
-}
+  var _args110 CassandraExecuteCqlQueryArgs
+  _args110.Query = query
+  _args110.Compression = compression
+  var _result111 CassandraExecuteCqlQueryResult
+  if err = p.c.Call(ctx, "execute_cql_query", &_args110, &_result111); err != nil {
+    return
+  }
+  switch {
+  case _result111.Ire!= nil:
+    return r, _result111.Ire
+  case _result111.Ue!= nil:
+    return r, _result111.Ue
+  case _result111.Te!= nil:
+    return r, _result111.Te
+  case _result111.Sde!= nil:
+    return r, _result111.Sde
+  }
 
-func (p *CassandraClient) sendExecuteCqlQuery(query []byte, compression Compression)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("execute_cql_query", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraExecuteCqlQueryArgs{
-  Query : query,
-  Compression : compression,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvExecuteCqlQuery() (value *CqlResult_, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "execute_cql_query" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "execute_cql_query failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "execute_cql_query failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error110 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error111 error
-    error111, err = error110.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error111
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "execute_cql_query failed: invalid message type")
-    return
-  }
-  result := CassandraExecuteCqlQueryResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  } else   if result.Sde != nil {
-    err = result.Sde
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result111.GetSuccess(), nil
 }
 
 // Executes a CQL3 (Cassandra Query Language) statement and returns a
@@ -13100,92 +10599,26 @@ func (p *CassandraClient) recvExecuteCqlQuery() (value *CqlResult_, err error) {
 //  - Compression
 //  - Consistency
 func (p *CassandraClient) ExecuteCql3Query(ctx context.Context, query []byte, compression Compression, consistency ConsistencyLevel) (r *CqlResult_, err error) {
-  if err = p.sendExecuteCql3Query(query, compression, consistency); err != nil { return }
-  return p.recvExecuteCql3Query()
-}
+  var _args112 CassandraExecuteCql3QueryArgs
+  _args112.Query = query
+  _args112.Compression = compression
+  _args112.Consistency = consistency
+  var _result113 CassandraExecuteCql3QueryResult
+  if err = p.c.Call(ctx, "execute_cql3_query", &_args112, &_result113); err != nil {
+    return
+  }
+  switch {
+  case _result113.Ire!= nil:
+    return r, _result113.Ire
+  case _result113.Ue!= nil:
+    return r, _result113.Ue
+  case _result113.Te!= nil:
+    return r, _result113.Te
+  case _result113.Sde!= nil:
+    return r, _result113.Sde
+  }
 
-func (p *CassandraClient) sendExecuteCql3Query(query []byte, compression Compression, consistency ConsistencyLevel)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("execute_cql3_query", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraExecuteCql3QueryArgs{
-  Query : query,
-  Compression : compression,
-  Consistency : consistency,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvExecuteCql3Query() (value *CqlResult_, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "execute_cql3_query" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "execute_cql3_query failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "execute_cql3_query failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error112 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error113 error
-    error113, err = error112.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error113
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "execute_cql3_query failed: invalid message type")
-    return
-  }
-  result := CassandraExecuteCql3QueryResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  } else   if result.Sde != nil {
-    err = result.Sde
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result113.GetSuccess(), nil
 }
 
 // @deprecated Throws InvalidRequestException since 2.2. Please use the CQL3 version instead.
@@ -13194,82 +10627,19 @@ func (p *CassandraClient) recvExecuteCql3Query() (value *CqlResult_, err error) 
 //  - Query
 //  - Compression
 func (p *CassandraClient) PrepareCqlQuery(ctx context.Context, query []byte, compression Compression) (r *CqlPreparedResult_, err error) {
-  if err = p.sendPrepareCqlQuery(query, compression); err != nil { return }
-  return p.recvPrepareCqlQuery()
-}
+  var _args114 CassandraPrepareCqlQueryArgs
+  _args114.Query = query
+  _args114.Compression = compression
+  var _result115 CassandraPrepareCqlQueryResult
+  if err = p.c.Call(ctx, "prepare_cql_query", &_args114, &_result115); err != nil {
+    return
+  }
+  switch {
+  case _result115.Ire!= nil:
+    return r, _result115.Ire
+  }
 
-func (p *CassandraClient) sendPrepareCqlQuery(query []byte, compression Compression)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("prepare_cql_query", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraPrepareCqlQueryArgs{
-  Query : query,
-  Compression : compression,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvPrepareCqlQuery() (value *CqlPreparedResult_, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "prepare_cql_query" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "prepare_cql_query failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "prepare_cql_query failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error114 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error115 error
-    error115, err = error114.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error115
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "prepare_cql_query failed: invalid message type")
-    return
-  }
-  result := CassandraPrepareCqlQueryResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result115.GetSuccess(), nil
 }
 
 // Prepare a CQL3 (Cassandra Query Language) statement by compiling and returning
@@ -13281,82 +10651,19 @@ func (p *CassandraClient) recvPrepareCqlQuery() (value *CqlPreparedResult_, err 
 //  - Query
 //  - Compression
 func (p *CassandraClient) PrepareCql3Query(ctx context.Context, query []byte, compression Compression) (r *CqlPreparedResult_, err error) {
-  if err = p.sendPrepareCql3Query(query, compression); err != nil { return }
-  return p.recvPrepareCql3Query()
-}
+  var _args116 CassandraPrepareCql3QueryArgs
+  _args116.Query = query
+  _args116.Compression = compression
+  var _result117 CassandraPrepareCql3QueryResult
+  if err = p.c.Call(ctx, "prepare_cql3_query", &_args116, &_result117); err != nil {
+    return
+  }
+  switch {
+  case _result117.Ire!= nil:
+    return r, _result117.Ire
+  }
 
-func (p *CassandraClient) sendPrepareCql3Query(query []byte, compression Compression)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("prepare_cql3_query", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraPrepareCql3QueryArgs{
-  Query : query,
-  Compression : compression,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvPrepareCql3Query() (value *CqlPreparedResult_, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "prepare_cql3_query" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "prepare_cql3_query failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "prepare_cql3_query failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error116 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error117 error
-    error117, err = error116.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error117
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "prepare_cql3_query failed: invalid message type")
-    return
-  }
-  result := CassandraPrepareCql3QueryResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result117.GetSuccess(), nil
 }
 
 // @deprecated Throws InvalidRequestException since 2.2. Please use the CQL3 version instead.
@@ -13365,91 +10672,25 @@ func (p *CassandraClient) recvPrepareCql3Query() (value *CqlPreparedResult_, err
 //  - ItemId
 //  - Values
 func (p *CassandraClient) ExecutePreparedCqlQuery(ctx context.Context, itemId int32, values [][]byte) (r *CqlResult_, err error) {
-  if err = p.sendExecutePreparedCqlQuery(itemId, values); err != nil { return }
-  return p.recvExecutePreparedCqlQuery()
-}
+  var _args118 CassandraExecutePreparedCqlQueryArgs
+  _args118.ItemId = itemId
+  _args118.Values = values
+  var _result119 CassandraExecutePreparedCqlQueryResult
+  if err = p.c.Call(ctx, "execute_prepared_cql_query", &_args118, &_result119); err != nil {
+    return
+  }
+  switch {
+  case _result119.Ire!= nil:
+    return r, _result119.Ire
+  case _result119.Ue!= nil:
+    return r, _result119.Ue
+  case _result119.Te!= nil:
+    return r, _result119.Te
+  case _result119.Sde!= nil:
+    return r, _result119.Sde
+  }
 
-func (p *CassandraClient) sendExecutePreparedCqlQuery(itemId int32, values [][]byte)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("execute_prepared_cql_query", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraExecutePreparedCqlQueryArgs{
-  ItemId : itemId,
-  Values : values,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvExecutePreparedCqlQuery() (value *CqlResult_, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "execute_prepared_cql_query" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "execute_prepared_cql_query failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "execute_prepared_cql_query failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error118 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error119 error
-    error119, err = error118.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error119
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "execute_prepared_cql_query failed: invalid message type")
-    return
-  }
-  result := CassandraExecutePreparedCqlQueryResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  } else   if result.Sde != nil {
-    err = result.Sde
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result119.GetSuccess(), nil
 }
 
 // Executes a prepared CQL3 (Cassandra Query Language) statement by passing an id token, a list of variables
@@ -13460,92 +10701,26 @@ func (p *CassandraClient) recvExecutePreparedCqlQuery() (value *CqlResult_, err 
 //  - Values
 //  - Consistency
 func (p *CassandraClient) ExecutePreparedCql3Query(ctx context.Context, itemId int32, values [][]byte, consistency ConsistencyLevel) (r *CqlResult_, err error) {
-  if err = p.sendExecutePreparedCql3Query(itemId, values, consistency); err != nil { return }
-  return p.recvExecutePreparedCql3Query()
-}
+  var _args120 CassandraExecutePreparedCql3QueryArgs
+  _args120.ItemId = itemId
+  _args120.Values = values
+  _args120.Consistency = consistency
+  var _result121 CassandraExecutePreparedCql3QueryResult
+  if err = p.c.Call(ctx, "execute_prepared_cql3_query", &_args120, &_result121); err != nil {
+    return
+  }
+  switch {
+  case _result121.Ire!= nil:
+    return r, _result121.Ire
+  case _result121.Ue!= nil:
+    return r, _result121.Ue
+  case _result121.Te!= nil:
+    return r, _result121.Te
+  case _result121.Sde!= nil:
+    return r, _result121.Sde
+  }
 
-func (p *CassandraClient) sendExecutePreparedCql3Query(itemId int32, values [][]byte, consistency ConsistencyLevel)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("execute_prepared_cql3_query", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraExecutePreparedCql3QueryArgs{
-  ItemId : itemId,
-  Values : values,
-  Consistency : consistency,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvExecutePreparedCql3Query() (value *CqlResult_, err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "execute_prepared_cql3_query" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "execute_prepared_cql3_query failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "execute_prepared_cql3_query failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error120 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error121 error
-    error121, err = error120.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error121
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "execute_prepared_cql3_query failed: invalid message type")
-    return
-  }
-  result := CassandraExecutePreparedCql3QueryResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  } else   if result.Ue != nil {
-    err = result.Ue
-    return 
-  } else   if result.Te != nil {
-    err = result.Te
-    return 
-  } else   if result.Sde != nil {
-    err = result.Sde
-    return 
-  }
-  value = result.GetSuccess()
-  return
+  return _result121.GetSuccess(), nil
 }
 
 // @deprecated This is now a no-op. Please use the CQL3 specific methods instead.
@@ -13553,82 +10728,19 @@ func (p *CassandraClient) recvExecutePreparedCql3Query() (value *CqlResult_, err
 // Parameters:
 //  - Version
 func (p *CassandraClient) SetCqlVersion(ctx context.Context, version string) (err error) {
-  if err = p.sendSetCqlVersion(version); err != nil { return }
-  return p.recvSetCqlVersion()
+  var _args122 CassandraSetCqlVersionArgs
+  _args122.Version = version
+  var _result123 CassandraSetCqlVersionResult
+  if err = p.c.Call(ctx, "set_cql_version", &_args122, &_result123); err != nil {
+    return
+  }
+  switch {
+  case _result123.Ire!= nil:
+    return _result123.Ire
+  }
+
+  return nil
 }
-
-func (p *CassandraClient) sendSetCqlVersion(version string)(err error) {
-  oprot := p.OutputProtocol
-  if oprot == nil {
-    oprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.OutputProtocol = oprot
-  }
-  p.SeqId++
-  if err = oprot.WriteMessageBegin("set_cql_version", thrift.CALL, p.SeqId); err != nil {
-      return
-  }
-  args := CassandraSetCqlVersionArgs{
-  Version : version,
-  }
-  if err = args.Write(oprot); err != nil {
-      return
-  }
-  if err = oprot.WriteMessageEnd(); err != nil {
-      return
-  }
-  return oprot.Flush()
-}
-
-
-func (p *CassandraClient) recvSetCqlVersion() (err error) {
-  iprot := p.InputProtocol
-  if iprot == nil {
-    iprot = p.ProtocolFactory.GetProtocol(p.Transport)
-    p.InputProtocol = iprot
-  }
-  method, mTypeId, seqId, err := iprot.ReadMessageBegin()
-  if err != nil {
-    return
-  }
-  if method != "set_cql_version" {
-    err = thrift.NewTApplicationException(thrift.WRONG_METHOD_NAME, "set_cql_version failed: wrong method name")
-    return
-  }
-  if p.SeqId != seqId {
-    err = thrift.NewTApplicationException(thrift.BAD_SEQUENCE_ID, "set_cql_version failed: out of sequence response")
-    return
-  }
-  if mTypeId == thrift.EXCEPTION {
-    error122 := thrift.NewTApplicationException(thrift.UNKNOWN_APPLICATION_EXCEPTION, "Unknown Exception")
-    var error123 error
-    error123, err = error122.Read(iprot)
-    if err != nil {
-      return
-    }
-    if err = iprot.ReadMessageEnd(); err != nil {
-      return
-    }
-    err = error123
-    return
-  }
-  if mTypeId != thrift.REPLY {
-    err = thrift.NewTApplicationException(thrift.INVALID_MESSAGE_TYPE_EXCEPTION, "set_cql_version failed: invalid message type")
-    return
-  }
-  result := CassandraSetCqlVersionResult{}
-  if err = result.Read(iprot); err != nil {
-    return
-  }
-  if err = iprot.ReadMessageEnd(); err != nil {
-    return
-  }
-  if result.Ire != nil {
-    err = result.Ire
-    return 
-  }
-  return
-}
-
 
 type CassandraProcessor struct {
   processorMap map[string]thrift.TProcessorFunction
