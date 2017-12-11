@@ -17,7 +17,7 @@ Gossie is a Go library for Apache Cassandra. It includes a wrapper for the Cassa
 Install thrift:
 
 ```
-go get git.apache.org/thrift.git/lib/go/thrift
+go get github.com/betable/go-thrift/thrift
 ```
 
 

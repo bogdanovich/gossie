@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"git.apache.org/thrift.git/lib/go/thrift"
+	"github.com/betable/go-thrift/thrift"
 	"github.com/betable/gossie/src/cassandra"
 	"github.com/golang/glog"
 )
