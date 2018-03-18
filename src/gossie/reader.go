@@ -6,7 +6,6 @@ import (
 	"errors"
 
 	. "github.com/bogdanovich/gossie/src/cassandra"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/glog"
 )
 
@@ -299,7 +298,6 @@ func (r *reader) Get(key []byte) (*Row, error) {
 	if err != nil {
 		return nil, err
 	}
-	spew.Dump(ret)
 	return rowFromTListColumns(key, ret), nil
 }
 
