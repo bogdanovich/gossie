@@ -5,7 +5,7 @@ This is a fork of the original Gossie library created by carloscm.
 Some of the changes / additions in this fork:
 
 - the `mockgossie` package, which implements an in-memory store for your tests.
-- fix singular compact column names: https://github.com/wadey/gossie/commit/4518cec59bf4ecd13323e41c3d5b8ddc289a5f04
+- fix singular compact column names: https://github.com/bogdanovich/gossie/commit/4518cec59bf4ecd13323e41c3d5b8ddc289a5f04
 
 # About
 
@@ -17,7 +17,7 @@ Gossie is a Go library for Apache Cassandra. It includes a wrapper for the Cassa
 Install thrift:
 
 ```
-go get github.com/bogdanovich/go-thrift/thrift
+go get git.apache.org/thrift.git/lib/go/thrift
 ```
 
 

@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/bogdanobich/go-thrift/thrift"
+	"github.com/bogdanovich/go-thrift/thrift"
 	"github.com/bogdanovich/gossie/src/cassandra"
 )
 

@@ -6,13 +6,15 @@ import (
 	"errors"
 
 	. "github.com/bogdanovich/gossie/src/cassandra"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/glog"
 )
 
 // Row is a Cassandra row, including its row key
 type Row struct {
-	Key     []byte
-	Columns []*Column
+	Key          []byte
+	Columns      []*Column
+	SuperColumns []*SuperColumn
 }
 
 // RowColumnCount stores the number of columns matched in a MultiCount reader
@@ -297,7 +299,7 @@ func (r *reader) Get(key []byte) (*Row, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	spew.Dump(ret)
 	return rowFromTListColumns(key, ret), nil
 }
 
@@ -566,6 +568,7 @@ func rowFromTListColumns(key []byte, tl []*ColumnOrSuperColumn) *Row {
 		return r
 	}
 	r.Columns = make([]*Column, 0, len(tl))
+	r.SuperColumns = make([]*SuperColumn, 0)
 	for _, col := range tl {
 		if col.Column != nil {
 			r.Columns = append(r.Columns, col.Column)
@@ -576,6 +579,8 @@ func rowFromTListColumns(key []byte, tl []*ColumnOrSuperColumn) *Row {
 				Value: v,
 			}
 			r.Columns = append(r.Columns, c)
+		} else if col.SuperColumn != nil {
+			r.SuperColumns = append(r.SuperColumns, col.SuperColumn)
 		}
 	}
 	return r
