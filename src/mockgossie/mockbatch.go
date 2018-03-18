@@ -1,8 +1,8 @@
 package mockgossie
 
 import (
-	. "github.com/betable/gossie/src/cassandra"
-	. "github.com/betable/gossie/src/gossie"
+	. "github.com/bogdanovich/gossie/src/cassandra"
+	. "github.com/bogdanovich/gossie/src/gossie"
 )
 
 type MockBatch struct {

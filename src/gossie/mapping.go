@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"strings"
 
-	. "github.com/betable/gossie/src/cassandra"
+	. "github.com/bogdanovich/gossie/src/cassandra"
 )
 
 /*

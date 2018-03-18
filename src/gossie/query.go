@@ -4,7 +4,7 @@ import (
 	"errors"
 	"reflect"
 
-	. "github.com/betable/gossie/src/cassandra"
+	. "github.com/bogdanovich/gossie/src/cassandra"
 )
 
 /*

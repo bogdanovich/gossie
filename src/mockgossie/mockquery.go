@@ -5,8 +5,8 @@ import (
 	enc "encoding/binary"
 	"reflect"
 
-	. "github.com/betable/gossie/src/cassandra"
-	. "github.com/betable/gossie/src/gossie"
+	. "github.com/bogdanovich/gossie/src/cassandra"
+	. "github.com/bogdanovich/gossie/src/gossie"
 )
 
 const (

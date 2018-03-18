@@ -10,7 +10,7 @@ import (
 	"errors"
 	"context"
 	"fmt"
-	"github.com/betable/go-thrift/thrift"
+	"github.com/bogdanovich/go-thrift/thrift"
 )
 
 // (needed to ensure safety because of naive import list construction.)

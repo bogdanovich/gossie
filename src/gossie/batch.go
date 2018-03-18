@@ -1,7 +1,7 @@
 package gossie
 
 import (
-	"github.com/betable/gossie/src/cassandra"
+	"github.com/bogdanovich/gossie/src/cassandra"
 )
 
 // Batch is a high level interface for Cassandra writes. Simultaneous

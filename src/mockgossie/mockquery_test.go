@@ -6,7 +6,7 @@ import (
 
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/assert"
-	"github.com/betable/gossie/src/gossie"
+	"github.com/bogdanovich/gossie/src/gossie"
 )
 
 type BetweenStruct struct {

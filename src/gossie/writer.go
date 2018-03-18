@@ -3,8 +3,8 @@ package gossie
 import (
 	"context"
 
-	"github.com/betable/go-thrift/thrift"
-	"github.com/betable/gossie/src/cassandra"
+	"github.com/bogdanovich/go-thrift/thrift"
+	"github.com/bogdanovich/gossie/src/cassandra"
 )
 
 // Writer is the interface for all the write operations over Cassandra.

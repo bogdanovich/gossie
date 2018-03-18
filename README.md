@@ -17,7 +17,7 @@ Gossie is a Go library for Apache Cassandra. It includes a wrapper for the Cassa
 Install thrift:
 
 ```
-go get github.com/betable/go-thrift/thrift
+go get github.com/bogdanovich/go-thrift/thrift
 ```
 
 
@@ -28,8 +28,8 @@ There is no need to generate a Cassandra Thrift binding, I am providing one with
 For application usage issue two `go get` commands, one for the bindings and another for Gossie
 
 ```
-go get "github.com/wadey/gossie/src/cassandra"
-go get "github.com/wadey/gossie/src/gossie"
+go get "github.com/bogdanovich/gossie/src/cassandra"
+go get "github.com/bogdanovich/gossie/src/gossie"
 ```
 
 If you want to fork and do development on Gossie itself the main command you need to run is something like (from the root of the Gossie folder):
@@ -52,7 +52,7 @@ Gossie follows the Go 1.0 packaging conventions. Import Gossie into your code li
 
 ```Go
 import (
-	"github.com/wadey/gossie/src/gossie"
+	"github.com/bogdanovich/gossie/src/gossie"
 )
 ````
 

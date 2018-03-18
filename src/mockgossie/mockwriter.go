@@ -5,9 +5,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/betable/go-thrift/thrift"
-	. "github.com/betable/gossie/src/cassandra"
-	. "github.com/betable/gossie/src/gossie"
+	"github.com/bogdanobich/go-thrift/thrift"
+	. "github.com/bogdanovich/gossie/src/cassandra"
+	. "github.com/bogdanovich/gossie/src/gossie"
 )
 
 type MockWriter struct {
